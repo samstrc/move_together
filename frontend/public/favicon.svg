@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <!-- Dolly: handle, upright bar, and base plate -->
+  <path d="M7 6 H15 V52 H58" fill="none" stroke="#111111" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
+  <!-- Wheel -->
+  <circle cx="16" cy="55" r="6" fill="#ffffff" stroke="#111111" stroke-width="3.5" />
+  <!-- Box labeled MT -->
+  <rect x="21" y="18" width="34" height="31" rx="3" fill="#89cff0" stroke="#111111" stroke-width="3" />
+  <text x="38" y="40" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#111111">MT</text>
+</svg>
