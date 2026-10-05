@@ -19,7 +19,7 @@ shopping list, a group budget, and Dolly, an AI shopping assistant.
 docker compose up -d
 ```
 
-This starts Postgres on `localhost:5432` (user `postgres`, password `password`,
+This starts Postgres on `localhost:5432` (user `relationalrebels`, password `password`,
 database `move_together`) and loads the tables and sample data from
 `db/init.sql` the first time. After changing `init.sql`, rebuild with
 `docker compose down -v && docker compose up -d` (this wipes the data).
@@ -44,11 +44,19 @@ cp .env.example .env
 uvicorn main:app --reload
 ```
 
+In `.env`, set `SECRET_KEY` to the output of `openssl rand -hex 32` (the server
+won't start with the placeholder).
+
+**Logging in:** the sample accounts (`sam@example.com`, `caius@example.com`,
+`qiaozhi@example.com`) all use the password `password123`. In `/docs`, call
+`POST /auth/login`, copy the `access_token`, click **Authorize**, and paste it.
+The frontend sends it as an `Authorization: Bearer <token>` header.
+
 ## Status
 
 The frontend pages are built but use fake data from
 `frontend/src/data/sampleData.js`. The backend is connected to the database
-(`backend/db.py`) and serves the item list at `/moves/{move_id}/items`;
-more endpoints are on the way.
+(`backend/db.py`), has sign up / log in (`backend/auth.py`), and serves the
+item list at `/moves/{move_id}/items` to members of that move.
 
 Planned work is tracked in [GitHub Issues](https://github.com/samstrc/move_together/issues).

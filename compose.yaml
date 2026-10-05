@@ -4,7 +4,7 @@
 #   docker compose down       stop it (your data is kept)
 #   docker compose down -v    stop it AND delete all data, so init.sql reruns next time
 #
-# Connect with: postgresql://postgres:password@localhost:5432/move_together
+# Connect with: postgresql://relationalrebels:password@localhost:5432/move_together
 
 services:
   db:
@@ -12,7 +12,7 @@ services:
     container_name: move_together_db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
+      POSTGRES_USER: relationalrebels
       POSTGRES_PASSWORD: password
       POSTGRES_DB: move_together
     ports:
@@ -22,7 +22,7 @@ services:
       # Scripts in this folder run once, when the database is first created.
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d move_together"]
+      test: ["CMD-SHELL", "pg_isready -U relationalrebels -d move_together"]
       interval: 5s
       timeout: 5s
       retries: 10

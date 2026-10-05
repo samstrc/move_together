@@ -13,6 +13,8 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from psycopg import Connection
 
+from auth import get_current_user, require_member
+from auth import router as auth_router
 from db import get_db, pool
 
 
@@ -34,6 +36,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_router)
+
 
 @app.get("/")
 def health_check(db: Connection = Depends(get_db)):
@@ -43,11 +47,13 @@ def health_check(db: Connection = Depends(get_db)):
 
 
 @app.get("/moves/{move_id}/items")
-def list_items(move_id: int, db: Connection = Depends(get_db)):
-    """The shared item list for one move, newest first.
-
-    TODO: Only let members of the move see this, once login exists.
-    """
+def list_items(
+    move_id: int,
+    user: dict = Depends(get_current_user),
+    db: Connection = Depends(get_db),
+):
+    """The shared item list for one move, newest first. Members only."""
+    require_member(move_id, user, db)
     return db.execute(
         """
         SELECT i.item_id,

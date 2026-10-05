@@ -236,11 +236,12 @@ INSERT INTO categories (name) VALUES
     ('Moving costs'),  -- 9
     ('Other');         -- 10
 
--- Placeholder hashes: these accounts can't log in until real auth exists.
+-- Every seed account's password is: password123
+-- (Argon2 hash made with pwdlib; see backend/auth.py.)
 INSERT INTO users (email, name, password_hash) VALUES
-    ('sam@example.com',     'Sam Strickler', 'not-a-real-hash'),  -- 1
-    ('caius@example.com',   'Caius Price',   'not-a-real-hash'),  -- 2
-    ('qiaozhi@example.com', 'Qiaozhi Yong',  'not-a-real-hash');  -- 3
+    ('sam@example.com',     'Sam Strickler', '$argon2id$v=19$m=65536,t=3,p=4$xNuU/z9dbnDGFKZXWUcM1A$iNiV3q91wL1Qa4O43ubVCIpTZrWoEoOPn3Z2Gsveo0w'),  -- 1
+    ('caius@example.com',   'Caius Price',   '$argon2id$v=19$m=65536,t=3,p=4$xNuU/z9dbnDGFKZXWUcM1A$iNiV3q91wL1Qa4O43ubVCIpTZrWoEoOPn3Z2Gsveo0w'),  -- 2
+    ('qiaozhi@example.com', 'Qiaozhi Yong',  '$argon2id$v=19$m=65536,t=3,p=4$xNuU/z9dbnDGFKZXWUcM1A$iNiV3q91wL1Qa4O43ubVCIpTZrWoEoOPn3Z2Gsveo0w');  -- 3
 
 INSERT INTO moves (name, destination, target_date, created_by) VALUES
     ('Our First Apartment', '123 Main St, Akron, OH', '2026-12-15', 1);
