@@ -25,14 +25,23 @@ export async function api(path, { method = 'GET', body } = {}) {
     headers,
     body: body ? JSON.stringify(body) : undefined,
   })
-  const data = await response.json()
+  // Some responses have no body (e.g. 204 after a delete), and a server crash
+  // sends plain text instead of JSON, so only parse JSON when there is some.
+  const text = await response.text()
+  let data = null
+  try {
+    data = text ? JSON.parse(text) : null
+  } catch {
+    // Not JSON: leave data as null
+  }
 
   if (!response.ok) {
     // FastAPI sends errors as { detail: "message" } for errors we raise,
     // or { detail: [ {msg: ...}, ... ] } when the input fails validation.
-    const message = Array.isArray(data.detail)
-      ? data.detail.map((d) => d.msg).join(', ')
-      : data.detail
+    const detail = data?.detail
+    const message = Array.isArray(detail)
+      ? detail.map((d) => d.msg).join(', ')
+      : detail
     const error = new Error(message || 'Something went wrong')
     error.status = response.status // e.g. 401 = not logged in / token expired
     throw error

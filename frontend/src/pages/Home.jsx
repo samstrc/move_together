@@ -34,8 +34,8 @@ function Home() {
       <section className="hero">
         <h1>Plan your move, together.</h1>
         <p className="hero-subtitle">
-          One shared place for roommates and couples to plan what to buy,
-          split the budget, and get settled in without the group-chat chaos.
+          Moving in with roommates or a partner? Make one list of what the new
+          place needs, set a budget, and keep track of who paid for what.
         </p>
         <div className="hero-actions">
           <Link to="/signup" className="btn btn-primary btn-large">Get started</Link>

@@ -28,9 +28,10 @@ body {
   background: var(--bg);
 }
 
+/* The app fills the whole window. Pages that need a readable line length
+   limit their own content (see .page-width in App.css). */
 #root {
-  max-width: 1126px;
-  margin: 0 auto;
+  width: 100%;
   min-height: 100svh;
   display: flex;
   flex-direction: column;
@@ -65,5 +66,12 @@ p {
 
   h1 {
     font-size: 36px;
+  }
+}
+
+@media (max-width: 480px) {
+  h1 {
+    font-size: 30px;
+    letter-spacing: -0.5px;
   }
 }

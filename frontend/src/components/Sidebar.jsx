@@ -1,5 +1,4 @@
 import { Link, NavLink } from 'react-router-dom'
-import { group } from '../data/sampleData.js'
 
 // Left-hand menu for the pages you see after logging in.
 // NavLink adds the "active" class to the link for the page you're on.
@@ -13,14 +12,32 @@ const links = [
 ]
 
 // user: the logged-in user ({ name, email, ... }), or null while loading.
+// moves / move: all of your groups, and the one being viewed (or null).
+// onSelectMove: called with a move_id when you switch groups.
 // onLogOut: called when the Log out button is clicked.
-function Sidebar({ user, onLogOut }) {
+function Sidebar({ user, moves, move, onSelectMove, onLogOut }) {
   return (
     <aside className="sidebar">
       <Link to="/dashboard" className="brand">
         Move Together
       </Link>
-      <p className="sidebar-group">{group.name}</p>
+
+      {moves.length > 1 ? (
+        <select
+          className="sidebar-group-select"
+          value={move?.move_id ?? ''}
+          onChange={(e) => onSelectMove(Number(e.target.value))}
+          aria-label="Switch group"
+        >
+          {moves.map((m) => (
+            <option key={m.move_id} value={m.move_id}>
+              {m.name}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <p className="sidebar-group">{move ? move.name : 'No group yet'}</p>
+      )}
 
       <nav className="sidebar-links">
         {links.map((link) => (

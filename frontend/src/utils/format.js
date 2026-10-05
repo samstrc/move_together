@@ -1,7 +1,16 @@
 // Small helpers for showing numbers and dates nicely.
 
-export function formatMoney(amount) {
-  return amount.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+// Every price in the app uses this currency. It's US dollars for now; the
+// new-group survey can let people pick another one later.
+export const CURRENCY = 'USD'
+
+export function formatMoney(amount, currency = CURRENCY) {
+  return amount.toLocaleString('en-US', { style: 'currency', currency })
+}
+
+// "$" for USD, "€" for EUR, ...
+export function currencySymbol(currency = CURRENCY) {
+  return (0).toLocaleString('en-US', { style: 'currency', currency }).replace(/[\d.,\s]/g, '')
 }
 
 export function formatDate(isoDate) {
