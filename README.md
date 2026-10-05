@@ -32,7 +32,8 @@ npm install
 npm run dev
 ```
 
-**Backend** — opens at http://localhost:8000 (API docs at `/docs`)
+**Backend** — opens at http://localhost:8000 (API docs at `/docs`). Start the
+database first.
 
 ```
 cd backend
@@ -46,7 +47,8 @@ uvicorn main:app --reload
 ## Status
 
 The frontend pages are built but use fake data from
-`frontend/src/data/sampleData.js`. The backend is a starter template that isn't
-connected to the database yet.
+`frontend/src/data/sampleData.js`. The backend is connected to the database
+(`backend/db.py`) and serves the item list at `/moves/{move_id}/items`;
+more endpoints are on the way.
 
 Planned work is tracked in [GitHub Issues](https://github.com/samstrc/move_together/issues).
