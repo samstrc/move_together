@@ -1,10 +1,5 @@
-# Local PostgreSQL for Move Together.
-#
-#   docker compose up -d      start the database (first run also loads db/init.sql)
-#   docker compose down       stop it (your data is kept)
-#   docker compose down -v    stop it AND delete all data, so init.sql reruns next time
-#
-# Connect with: postgresql://relationalrebels:password@localhost:5432/move_together
+# Move Together: database, backend, and frontend for local development.
+# How to run it, addresses, and database connection details: see README.md.
 
 services:
   db:
@@ -26,6 +21,37 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  api:
+    build: ./backend
+    container_name: move_together_api
+    # SECRET_KEY and LLM_API_KEY come from backend/.env (copy .env.example).
+    env_file: backend/.env
+    environment:
+      # Inside Docker the database is reached by its service name, "db",
+      # not localhost. This overrides DATABASE_URL from backend/.env.
+      DATABASE_URL: postgresql://relationalrebels:password@db:5432/move_together
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - /app/.venv          # hide your Mac's .venv from the container
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build: ./frontend
+    container_name: move_together_web
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      # Keep the container's own node_modules (built for Linux) instead of
+      # your Mac's, which has Mac-only binaries.
+      - /app/node_modules
+    depends_on:
+      - api
 
 volumes:
   db_data:
