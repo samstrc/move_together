@@ -1,12 +1,35 @@
 import { Link, useNavigate } from 'react-router-dom'
+import { useState } from 'react'
+import { api, setToken } from '../api.js'
 
 function Login() {
   const navigate = useNavigate()
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault() // stop the browser reloading the page
-    // TODO: Send email + password to the backend and save the login token.
-    navigate('/dashboard')
+    setError('')
+    setLoading(true)
+
+    const form = new FormData(event.target)
+
+    try {
+      // Send email + password to the backend and save the login token
+      const data = await api('/auth/login', {
+        method: 'POST',
+        body: {
+          email: form.get('email'),
+          password: form.get('password'),
+        },
+      })
+      setToken(data.access_token)
+      navigate('/dashboard')
+    } catch (err) {
+      setError(err.message) // e.g. "Invalid email or password"
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -24,7 +47,11 @@ function Login() {
           <input type="password" name="password" required />
         </label>
 
-        <button type="submit" className="btn btn-primary">Log in</button>
+        {error && <p className="form-error">{error}</p>}
+
+        <button type="submit" className="btn btn-primary" disabled={loading}>
+          {loading ? 'Logging in…' : 'Log in'}
+        </button>
 
         <p className="auth-switch">
           New here? <Link to="/signup">Create an account</Link>

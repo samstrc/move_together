@@ -274,6 +274,20 @@
   box-sizing: border-box;
 }
 
+.auth-card .btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.form-error {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: #fdecec;
+  color: #b42318;
+  font-size: 15px;
+}
+
 .auth-switch {
   margin-top: 16px;
   text-align: center;
@@ -292,6 +306,24 @@
   padding: 24px 16px;
   border-right: 1px solid var(--border);
   background: var(--card-bg);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Pushed to the bottom of the sidebar */
+.sidebar-footer {
+  margin-top: auto;
+  padding-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sidebar-user {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-h);
 }
 
 .sidebar-group {
@@ -542,6 +574,13 @@ tr.is-done td {
 
   .sidebar-link {
     white-space: nowrap;
+  }
+
+  .sidebar-footer {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 12px;
   }
 
   .app-content {

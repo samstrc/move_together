@@ -12,7 +12,9 @@ const links = [
   { to: '/profile', label: 'Profile' },
 ]
 
-function Sidebar() {
+// user: the logged-in user ({ name, email, ... }), or null while loading.
+// onLogOut: called when the Log out button is clicked.
+function Sidebar({ user, onLogOut }) {
   return (
     <aside className="sidebar">
       <Link to="/dashboard" className="brand">
@@ -27,6 +29,13 @@ function Sidebar() {
           </NavLink>
         ))}
       </nav>
+
+      <div className="sidebar-footer">
+        {user && <p className="sidebar-user">{user.name}</p>}
+        <button type="button" className="btn btn-ghost btn-small" onClick={onLogOut}>
+          Log out
+        </button>
+      </div>
     </aside>
   )
 }
