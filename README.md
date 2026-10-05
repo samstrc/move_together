@@ -9,9 +9,20 @@ shopping list, a group budget, and Dolly, an AI shopping assistant.
 
 - **Frontend:** React + Vite (JavaScript) - `frontend/`
 - **Backend:** FastAPI (Python) - `backend/`
-- **Database:** PostgreSQL (not set up yet)
+- **Database:** PostgreSQL 18 in Docker - `compose.yaml`, schema in `db/init.sql`
 
 ## Running it
+
+**Database** — needs [Docker Desktop](https://www.docker.com/products/docker-desktop/) running
+
+```
+docker compose up -d
+```
+
+This starts Postgres on `localhost:5432` (user `postgres`, password `password`,
+database `move_together`) and loads the tables and sample data from
+`db/init.sql` the first time. After changing `init.sql`, rebuild with
+`docker compose down -v && docker compose up -d` (this wipes the data).
 
 **Frontend** — opens at http://localhost:5173
 
@@ -35,7 +46,7 @@ uvicorn main:app --reload
 ## Status
 
 The frontend pages are built but use fake data from
-`frontend/src/data/sampleData.js`. The backend is a starter template and the
-database isn't set up yet.
+`frontend/src/data/sampleData.js`. The backend is a starter template that isn't
+connected to the database yet.
 
 Planned work is tracked in [GitHub Issues](https://github.com/samstrc/move_together/issues).
