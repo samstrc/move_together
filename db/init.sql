@@ -160,6 +160,19 @@ CREATE TABLE expense_splits (
     PRIMARY KEY (expense_id, user_id)
 );
 
+-- Money paid back between members to settle up ("Caius paid Sam $20").
+-- Not an expense: it doesn't count toward spending, it only moves balances.
+CREATE TABLE settlements (
+    settlement_id SERIAL PRIMARY KEY,
+    move_id       INT           NOT NULL REFERENCES moves(move_id) ON DELETE CASCADE,
+    from_user     INT           NOT NULL REFERENCES users(user_id),
+    to_user       INT           NOT NULL REFERENCES users(user_id),
+    amount        NUMERIC(10,2) NOT NULL CHECK (amount > 0),
+    recorded_by   INT           REFERENCES users(user_id),
+    settled_at    TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CHECK (from_user <> to_user)
+);
+
 -- ============================================================
 -- AI assistant (Dolly)
 -- ============================================================
@@ -212,6 +225,7 @@ CREATE INDEX idx_invitations_move   ON invitations(move_id);
 CREATE INDEX idx_rooms_move         ON rooms(move_id);
 CREATE INDEX idx_items_move         ON items(move_id);
 CREATE INDEX idx_expenses_move      ON expenses(move_id);
+CREATE INDEX idx_settlements_move   ON settlements(move_id);
 CREATE INDEX idx_ai_conv_move       ON ai_conversations(move_id);
 CREATE INDEX idx_ai_messages_conv   ON ai_messages(conversation_id);
 CREATE INDEX idx_activity_move      ON activity(move_id, activity_id);
@@ -251,8 +265,9 @@ INSERT INTO move_members (move_id, user_id, role, move_in_date) VALUES
     (1, 2, 'member', '2026-12-15'),
     (1, 3, 'member', '2026-12-20');
 
-INSERT INTO invitations (move_id, invited_by, invited_email, code, expires_at) VALUES
-    (1, 1, 'friend@example.com', 'MOVE-4821', '2026-12-01');
+-- An open invite code anyone can use to join (shown on the Group page).
+INSERT INTO invitations (move_id, invited_by, code) VALUES
+    (1, 1, 'MOVE-4821');
 
 INSERT INTO rooms (move_id, name) VALUES
     (1, 'Living room'),  -- 1

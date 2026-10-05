@@ -9,13 +9,17 @@ The database must be running first (`docker compose up -d` from the repo root).
 
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from psycopg import Connection
+from psycopg.errors import ForeignKeyViolation
 
-from auth import get_current_user, require_member
 from auth import router as auth_router
+from budget import router as budget_router
 from db import get_db, pool
+from items import router as items_router
+from moves import router as moves_router
 
 
 @asynccontextmanager
@@ -37,6 +41,15 @@ app.add_middleware(
 )
 
 app.include_router(auth_router)
+app.include_router(moves_router)
+app.include_router(items_router)
+app.include_router(budget_router)
+
+
+@app.exception_handler(ForeignKeyViolation)
+def foreign_key_error(request: Request, exc: ForeignKeyViolation):
+    """An ID in the request points to nothing (e.g. category_id 999)."""
+    return JSONResponse(status_code=400, content={"detail": "Something you picked doesn't exist"})
 
 
 @app.get("/")
@@ -44,34 +57,3 @@ def health_check(db: Connection = Depends(get_db)):
     """Quick way to check the server and database are running."""
     db.execute("SELECT 1")
     return {"status": "ok", "database": "ok"}
-
-
-@app.get("/moves/{move_id}/items")
-def list_items(
-    move_id: int,
-    user: dict = Depends(get_current_user),
-    db: Connection = Depends(get_db),
-):
-    """The shared item list for one move, newest first. Members only."""
-    require_member(move_id, user, db)
-    return db.execute(
-        """
-        SELECT i.item_id,
-               i.name,
-               c.name  AS category,
-               r.name  AS room,
-               i.quantity,
-               i.est_cost,
-               i.status,
-               ru.name AS responsible,
-               au.name AS added_by
-        FROM items i
-        LEFT JOIN categories c  ON c.category_id = i.category_id
-        LEFT JOIN rooms r       ON r.room_id     = i.room_id
-        LEFT JOIN users ru      ON ru.user_id    = i.responsible_user_id
-        LEFT JOIN users au      ON au.user_id    = i.added_by
-        WHERE i.move_id = %s
-        ORDER BY i.created_at DESC, i.item_id DESC
-        """,
-        (move_id,),
-    ).fetchall()

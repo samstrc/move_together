@@ -72,6 +72,16 @@ class UserOut(BaseModel):
     email: str
 
 
+class ProfileUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    email: EmailStr | None = None
+
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=8, max_length=128)
+
+
 class TokenOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -118,17 +128,19 @@ def get_current_user(
     return user
 
 
-def require_member(move_id: int, user: dict, db: Connection) -> None:
-    """Raise 404 unless the user belongs to the move.
+def require_member(move_id: int, user: dict, db: Connection) -> str:
+    """Raise 404 unless the user belongs to the move; otherwise return their
+    role ('owner' or 'member').
 
     404 rather than 403 so outsiders can't tell which move IDs exist.
     """
-    is_member = db.execute(
-        "SELECT 1 FROM move_members WHERE move_id = %s AND user_id = %s",
+    row = db.execute(
+        "SELECT role FROM move_members WHERE move_id = %s AND user_id = %s",
         (move_id, user["user_id"]),
     ).fetchone()
-    if not is_member:
+    if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Move not found")
+    return row["role"]
 
 
 # ---------- Endpoints ----------
@@ -181,3 +193,49 @@ def login(body: LoginIn, db: Connection = Depends(get_db)):
 def me(user: dict = Depends(get_current_user)):
     """The logged-in user. Handy for checking a saved token still works."""
     return user
+
+
+@router.patch("/me", response_model=UserOut)
+def update_me(
+    body: ProfileUpdate,
+    user: dict = Depends(get_current_user),
+    db: Connection = Depends(get_db),
+):
+    """Change your name and/or email. Leave a field out to keep it."""
+    name = body.name.strip() if body.name is not None else user["name"]
+    email = body.email.lower() if body.email is not None else user["email"]
+    try:
+        return db.execute(
+            """
+            UPDATE users SET name = %s, email = %s
+            WHERE user_id = %s
+            RETURNING user_id, name, email
+            """,
+            (name, email, user["user_id"]),
+        ).fetchone()
+    except UniqueViolation:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An account with that email already exists",
+        )
+
+
+@router.post("/me/password", status_code=status.HTTP_204_NO_CONTENT)
+def change_password(
+    body: PasswordChange,
+    user: dict = Depends(get_current_user),
+    db: Connection = Depends(get_db),
+):
+    """Change your password. Requires the current one."""
+    row = db.execute(
+        "SELECT password_hash FROM users WHERE user_id = %s", (user["user_id"],)
+    ).fetchone()
+    if not password_hash.verify(body.current_password, row["password_hash"]):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect",
+        )
+    db.execute(
+        "UPDATE users SET password_hash = %s WHERE user_id = %s",
+        (password_hash.hash(body.new_password), user["user_id"]),
+    )
