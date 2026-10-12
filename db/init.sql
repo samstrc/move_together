@@ -251,7 +251,7 @@ INSERT INTO categories (name) VALUES
     ('Other');         -- 10
 
 -- Every seed account's password is: password123
--- (Argon2 hash made with pwdlib; see backend/auth.py.)
+-- (Argon2 hash made with pwdlib; see backend/auth_routes.py.)
 INSERT INTO users (email, name, password_hash) VALUES
     ('sam@example.com',     'Sam Strickler', '$argon2id$v=19$m=65536,t=3,p=4$xNuU/z9dbnDGFKZXWUcM1A$iNiV3q91wL1Qa4O43ubVCIpTZrWoEoOPn3Z2Gsveo0w'),  -- 1
     ('caius@example.com',   'Caius Price',   '$argon2id$v=19$m=65536,t=3,p=4$xNuU/z9dbnDGFKZXWUcM1A$iNiV3q91wL1Qa4O43ubVCIpTZrWoEoOPn3Z2Gsveo0w'),  -- 2

@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from psycopg import Connection, sql
 from pydantic import BaseModel, Field
 
-from auth import get_current_user, require_member
+from auth_routes import get_current_user, require_member
 from db import get_db
 
 router = APIRouter(tags=["items"])
