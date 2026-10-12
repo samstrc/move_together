@@ -10,7 +10,7 @@ const suggestions = [
 // Chat with the AI shopping assistant.
 // TODO: Send messages to a backend endpoint that calls the LLM, and let it
 // add items to the shared list.
-function Assistant() {
+function Dolly() {
   const [messages, setMessages] = useState([
     { role: 'assistant', text: "Hi, I'm Dolly! I can help you find products, compare prices, and build your group's list. What do you need?" },
   ])
@@ -66,4 +66,4 @@ function Assistant() {
   )
 }
 
-export default Assistant
+export default Dolly

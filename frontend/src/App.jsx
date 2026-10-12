@@ -10,7 +10,7 @@ import Signup from './pages/Signup.jsx'
 import Dashboard from './pages/Dashboard.jsx'
 import SharedList from './pages/SharedList.jsx'
 import Budget from './pages/Budget.jsx'
-import Assistant from './pages/Assistant.jsx'
+import Dolly from './pages/Dolly.jsx'
 import Group from './pages/Group.jsx'
 import Profile from './pages/Profile.jsx'
 import NotFound from './pages/NotFound.jsx'
@@ -33,7 +33,7 @@ function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/items" element={<SharedList />} />
         <Route path="/budget" element={<Budget />} />
-        <Route path="/assistant" element={<Assistant />} />
+        <Route path="/assistant" element={<Dolly />} />
         <Route path="/group" element={<Group />} />
         <Route path="/profile" element={<Profile />} />
       </Route>
