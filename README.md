@@ -29,6 +29,15 @@ the sample data.
 
 **3. Open the app:** http://localhost:5173
 
+Or start everything and open the app in one step (on a Mac; on Windows, use
+`start` instead of `open`):
+
+```
+docker compose up -d && open http://localhost:5173
+```
+
+If the page doesn't load right away, wait a few seconds and refresh.
+
 Log in with any sample account: `sam@example.com`, `caius@example.com`, or
 `qiaozhi@example.com`. The password for all three is `password123`.
 
