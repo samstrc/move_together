@@ -8,7 +8,7 @@ import Home from './pages/Home.jsx'
 import Login from './pages/Login.jsx'
 import Signup from './pages/Signup.jsx'
 import Dashboard from './pages/Dashboard.jsx'
-import Items from './pages/Items.jsx'
+import SharedList from './pages/SharedList.jsx'
 import Budget from './pages/Budget.jsx'
 import Assistant from './pages/Assistant.jsx'
 import Group from './pages/Group.jsx'
@@ -31,7 +31,7 @@ function App() {
       {/* Logged-in pages: sidebar on the left */}
       <Route element={<AppLayout />}>
         <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/items" element={<Items />} />
+        <Route path="/items" element={<SharedList />} />
         <Route path="/budget" element={<Budget />} />
         <Route path="/assistant" element={<Assistant />} />
         <Route path="/group" element={<Group />} />

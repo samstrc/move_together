@@ -16,7 +16,7 @@ const sections = [
 //   useApi(`/moves/${move.move_id}/items`)      // the shared list (status, category, est_cost, ...)
 //   useApi(`/moves/${move.move_id}/budget`)     // totals, per-category budget vs. spent, members' balances
 //   useApi(`/moves/${move.move_id}/expenses`)   // every expense, with how it was split
-// (useApi is in src/hooks/useApi.js; see Budget.jsx or Items.jsx for examples.)
+// (useApi is in src/hooks/useApi.js; see Budget.jsx or SharedList.jsx for examples.)
 // If `move` is null the user isn't in a group yet; <NoGroup /> handles that.
 function Dashboard() {
   const { user, move } = useOutletContext()

@@ -9,7 +9,7 @@ import { CURRENCY, formatMoney } from '../utils/format.js'
 
 // The group's shared shopping list: search/filter it, add items, check them
 // off, assign who's getting each one, and remove them.
-function Items() {
+function SharedList() {
   const { move } = useOutletContext()
   const moveId = move?.move_id
 
@@ -209,4 +209,4 @@ function Items() {
   )
 }
 
-export default Items
+export default SharedList
