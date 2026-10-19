@@ -221,6 +221,7 @@ CREATE TABLE activity (
 
 -- "Everything for this move" lookups the app does constantly.
 CREATE INDEX idx_move_members_user  ON move_members(user_id);  -- "my moves"
+CREATE UNIQUE INDEX idx_move_members_single_owner ON move_members(move_id) WHERE role = 'owner';
 CREATE INDEX idx_invitations_move   ON invitations(move_id);
 CREATE INDEX idx_rooms_move         ON rooms(move_id);
 CREATE INDEX idx_items_move         ON items(move_id);
@@ -322,3 +323,52 @@ INSERT INTO activity (move_id, actor_id, action, entity_type, entity_id, details
     (1, 2,    'item_added',       'item',    1, '{"name": "Couch"}'),
     (1, 1,    'expense_logged',   'expense', 1, '{"amount": 25.00}'),
     (1, NULL, 'product_suggested','item',    1, '{"product_id": 1}');
+
+-- A group must have exactly one owner at transaction commit. The unique index
+-- above prevents multiple owners; this deferred trigger prevents zero owners.
+CREATE OR REPLACE FUNCTION enforce_exactly_one_move_owner()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    affected_move_id INTEGER;
+    affected_move_ids INTEGER[];
+    owner_count INTEGER;
+BEGIN
+    IF TG_TABLE_NAME = 'moves' THEN
+        affected_move_ids := ARRAY[NEW.move_id];
+    ELSIF TG_OP = 'DELETE' THEN
+        affected_move_ids := ARRAY[OLD.move_id];
+    ELSIF TG_OP = 'UPDATE' AND OLD.move_id IS DISTINCT FROM NEW.move_id THEN
+        affected_move_ids := ARRAY[OLD.move_id, NEW.move_id];
+    ELSE
+        affected_move_ids := ARRAY[NEW.move_id];
+    END IF;
+
+    FOREACH affected_move_id IN ARRAY affected_move_ids LOOP
+        IF NOT EXISTS (SELECT 1 FROM moves WHERE move_id = affected_move_id) THEN
+            CONTINUE;
+        END IF;
+
+        SELECT COUNT(*) INTO owner_count
+        FROM move_members
+        WHERE move_id = affected_move_id AND role = 'owner';
+
+        IF owner_count <> 1 THEN
+            RAISE EXCEPTION 'Move % must have exactly one owner', affected_move_id
+                USING ERRCODE = '23514';
+        END IF;
+    END LOOP;
+    RETURN NULL;
+END;
+$$;
+
+CREATE CONSTRAINT TRIGGER moves_require_exactly_one_owner
+AFTER INSERT ON moves
+DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW EXECUTE FUNCTION enforce_exactly_one_move_owner();
+
+CREATE CONSTRAINT TRIGGER members_require_exactly_one_owner
+AFTER INSERT OR UPDATE OR DELETE ON move_members
+DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW EXECUTE FUNCTION enforce_exactly_one_move_owner();

@@ -10,7 +10,7 @@ import { formatDate } from '../utils/format.js'
 //
 // Who can do what (the backend enforces this too):
 //   - Everyone: edit move details, set their own move-in date, leave.
-//   - Owners: also change anyone's share or role, remove people,
+//   - The owner: also change anyone's share, transfer ownership, remove people,
 //     get a new invite code, and delete the group.
 function Group() {
   const { user, move, selectMove, reloadMoves } = useOutletContext()
@@ -83,6 +83,34 @@ function Group() {
     if (await save(() => api(`/moves/${move.move_id}/invite-code`, { method: 'POST' }), 'New invite code made.')) {
       details.reload()
     }
+  }
+
+  async function makeOwner(member) {
+    if (!window.confirm(`Transfer ownership of ${group.name} to ${member.name}? You will lose your owner privileges.`)) return
+
+    const result = await save(
+      () => api(`/moves/${move.move_id}/members/${member.user_id}/make-owner`, { method: 'POST' }),
+      `${member.name} is now the owner.`,
+    )
+    if (!result || !result.owner_user_id) return
+
+    // Update the page from the successful response before doing any follow-up
+    // request, so the former owner immediately loses owner-only controls.
+    details.setData((current) => {
+      if (!current) return current
+      const members = current.members.map((person) => ({
+        ...person,
+        role: person.user_id === result.owner_user_id ? 'owner' : 'member',
+      }))
+      return {
+        ...current,
+        my_role: 'member',
+        members: members.sort(
+          (a, b) => Number(b.role === 'owner') - Number(a.role === 'owner') || a.name.localeCompare(b.name),
+        ),
+      }
+    })
+    reloadMoves()
   }
 
   async function removeMember(member) {
@@ -207,7 +235,7 @@ function Group() {
             <h2>Members</h2>
             <p className="muted">
               A member's <strong>share</strong> decides how expenses are split: 1 is normal, 2 pays twice as much
-              (e.g. for the bigger room). {isOwner ? 'As an owner, you can change anyone\'s share or role.' : 'Owners can change shares.'}
+              (e.g. for the bigger room). {isOwner ? 'As the owner, you can change anyone\'s share or transfer ownership.' : 'The owner can change shares.'}
             </p>
             <ul className="member-list">
               {group.members.map((member) => (
@@ -218,7 +246,9 @@ function Group() {
                   member={member}
                   isMe={member.user_id === user?.user_id}
                   iAmOwner={isOwner}
+                  canMakeOwner={isOwner && member.role !== 'owner' && member.user_id !== user?.user_id}
                   onSaved={() => details.reload()}
+                  onMakeOwner={() => makeOwner(member)}
                   onRemove={() => removeMember(member)}
                 />
               ))}
@@ -235,7 +265,7 @@ function Group() {
             </div>
             <p className="muted">
               {isOwner
-                ? 'If you\'re the only owner, make someone else an owner before leaving. Deleting removes the group for everyone.'
+                ? 'Transfer ownership before leaving. Deleting removes the group for everyone.'
                 : 'Your past expenses stay in the budget after you leave.'}
             </p>
           </section>
@@ -277,12 +307,11 @@ function Group() {
 }
 
 // One person in the Members list, with an inline editor.
-// Owners can edit everything for anyone; members only their own move-in date.
-function MemberRow({ moveId, member, isMe, iAmOwner, onSaved, onRemove }) {
+// The owner can edit details for anyone; members only their own move-in date.
+function MemberRow({ moveId, member, isMe, iAmOwner, canMakeOwner, onSaved, onMakeOwner, onRemove }) {
   const [editing, setEditing] = useState(false)
   const [moveInDate, setMoveInDate] = useState(member.move_in_date ?? '')
   const [share, setShare] = useState(String(member.split_weight))
-  const [role, setRole] = useState(member.role)
   const [error, setError] = useState('')
 
   const canEdit = iAmOwner || isMe
@@ -292,7 +321,6 @@ function MemberRow({ moveId, member, isMe, iAmOwner, onSaved, onRemove }) {
     const body = { move_in_date: moveInDate || null }
     if (iAmOwner) {
       body.split_weight = Number(share)
-      body.role = role
     }
     try {
       await api(`/moves/${moveId}/members/${member.user_id}`, { method: 'PATCH', body })
@@ -319,13 +347,6 @@ function MemberRow({ moveId, member, isMe, iAmOwner, onSaved, onRemove }) {
                 Share
                 <input type="number" min="0.25" max="999" step="0.25" value={share} onChange={(e) => setShare(e.target.value)} required />
               </label>
-              <label className="field">
-                Role
-                <select value={role} onChange={(e) => setRole(e.target.value)}>
-                  <option value="member">Member</option>
-                  <option value="owner">Owner</option>
-                </select>
-              </label>
             </>
           )}
           <div className="button-row">
@@ -342,6 +363,12 @@ function MemberRow({ moveId, member, isMe, iAmOwner, onSaved, onRemove }) {
     <li className="member-row">
       <div>
         <strong className="member-name">{member.name}</strong>
+        {member.role === 'owner' && (
+          <>
+            {' '}
+            <img className="owner-crown" src="/crown-filled.svg" alt="" />
+          </>
+        )}
         {isMe && <span className="muted"> (you)</span>}
         <p className="muted member-meta">
           {member.role === 'owner' ? 'Owner' : 'Member'}
@@ -350,12 +377,39 @@ function MemberRow({ moveId, member, isMe, iAmOwner, onSaved, onRemove }) {
           {member.move_in_date ? `moving in ${formatDate(member.move_in_date)}` : 'no move-in date'}
         </p>
       </div>
-      <div className="button-row">
+      <div className="item-actions member-actions">
         {canEdit && (
-          <button type="button" className="btn-link" onClick={() => setEditing(true)}>Edit</button>
+          <button
+            type="button"
+            className="item-action-button item-action-edit"
+            onClick={() => setEditing(true)}
+            aria-label={`Edit ${member.name}`}
+            title={`Edit ${member.name}`}
+          >
+            <img src="/pencil.svg" alt="" aria-hidden="true" />
+          </button>
+        )}
+        {canMakeOwner && (
+          <button
+            type="button"
+            className="item-action-button item-action-owner"
+            onClick={onMakeOwner}
+            aria-label={`Make ${member.name} owner`}
+            title={`Make ${member.name} owner`}
+          >
+            <img src="/crown.svg" alt="" aria-hidden="true" />
+          </button>
         )}
         {iAmOwner && !isMe && (
-          <button type="button" className="btn-link" onClick={onRemove}>Remove</button>
+          <button
+            type="button"
+            className="item-action-button item-action-remove"
+            onClick={onRemove}
+            aria-label={`Remove ${member.name}`}
+            title={`Remove ${member.name}`}
+          >
+            <img src="/user-x.svg" alt="" aria-hidden="true" />
+          </button>
         )}
       </div>
     </li>

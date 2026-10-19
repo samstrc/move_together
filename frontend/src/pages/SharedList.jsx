@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useOutletContext } from 'react-router-dom'
 import NoGroup from '../components/NoGroup.jsx'
 import MoneyInput from '../components/MoneyInput.jsx'
@@ -26,12 +27,8 @@ function SharedList() {
   const categories = useApi('/categories')
   const details = useApi(moveId ? `/moves/${moveId}` : null) // for the members list
 
-  // "Add item" form
-  const [name, setName] = useState('')
-  const [categoryId, setCategoryId] = useState('')
-  const [price, setPrice] = useState('')
-  const [responsibleId, setResponsibleId] = useState('')
   const [error, setError] = useState('')
+  const [itemDialog, setItemDialog] = useState(null)
 
   if (!move) return <NoGroup title="Shared list" />
 
@@ -48,25 +45,17 @@ function SharedList() {
     }
   }
 
-  function handleAdd(event) {
-    event.preventDefault()
-    save(async () => {
-      await api(`/moves/${moveId}/items`, {
-        method: 'POST',
-        body: {
-          name,
-          category_id: categoryId ? Number(categoryId) : null,
-          est_cost: price === '' ? null : Number(price),
-          responsible_user_id: responsibleId ? Number(responsibleId) : null,
-        },
-      })
-      setName('')
-      setPrice('')
-    })
-  }
-
   function updateItem(item, changes) {
     save(() => api(`/moves/${moveId}/items/${item.item_id}`, { method: 'PATCH', body: changes }))
+  }
+
+  async function saveItemDetails(item, changes) {
+    const path = item ? `/moves/${moveId}/items/${item.item_id}` : `/moves/${moveId}/items`
+    await api(path, {
+      method: item ? 'PATCH' : 'POST',
+      body: changes,
+    })
+    items.reload()
   }
 
   function removeItem(item) {
@@ -80,44 +69,6 @@ function SharedList() {
   return (
     <>
       <PageHeader title="Shared list" subtitle="Everything your group needs for the new place." />
-
-      <form className="card inline-form" onSubmit={handleAdd}>
-        <label className="field">
-          Item
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            spellCheck={true}
-            autoCorrect="on"
-            autoCapitalize="sentences"
-            lang="en"
-            required
-          />
-        </label>
-        <label className="field">
-          Category
-          <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-            <option value="">—</option>
-            {(categories.data ?? []).map((c) => (
-              <option key={c.category_id} value={c.category_id}>{c.name}</option>
-            ))}
-          </select>
-        </label>
-        <label className="field">
-          Est. price ({CURRENCY})
-          <MoneyInput value={price} onChange={(e) => setPrice(e.target.value)} />
-        </label>
-        <label className="field">
-          Who's getting it
-          <select value={responsibleId} onChange={(e) => setResponsibleId(e.target.value)}>
-            <option value="">Anyone</option>
-            {members.map((m) => (
-              <option key={m.user_id} value={m.user_id}>{m.name}</option>
-            ))}
-          </select>
-        </label>
-        <button type="submit" className="btn btn-primary">Add item</button>
-      </form>
 
       {(error || items.error) && <p className="form-error">{error || items.error}</p>}
 
@@ -148,7 +99,7 @@ function SharedList() {
 
         {itemList.length === 0 ? (
           <p className="muted">
-            {items.loading ? 'Loading…' : filtering ? 'No items match.' : 'Nothing on the list yet. Add the first item above.'}
+            {items.loading ? 'Loading…' : filtering ? 'No items match.' : 'Nothing on the list yet. Add the first item below.'}
           </p>
         ) : (
           <table>
@@ -160,7 +111,7 @@ function SharedList() {
                 <th>Est. price</th>
                 <th>Who's getting it</th>
                 <th>Added by</th>
-                <th><span className="visually-hidden">Remove</span></th>
+                <th><span className="visually-hidden">Item actions</span></th>
               </tr>
             </thead>
             <tbody>
@@ -174,7 +125,7 @@ function SharedList() {
                       aria-label={`Mark ${item.name} as bought`}
                     />
                   </td>
-                  <td>
+                  <td className="item-name-cell">
                     {item.name}
                     {item.quantity > 1 && <span className="muted"> ×{item.quantity}</span>}
                   </td>
@@ -195,17 +146,184 @@ function SharedList() {
                   </td>
                   <td>{item.added_by ?? 'Dolly'}</td>
                   <td>
-                    <button type="button" className="btn-link" onClick={() => removeItem(item)}>
-                      Remove
-                    </button>
+                    <div className="item-actions">
+                      <button
+                        type="button"
+                        className="item-action-button item-action-edit"
+                        onClick={() => setItemDialog({ mode: 'edit', item })}
+                        aria-label={`Edit ${item.name}`}
+                        title={`Edit ${item.name}`}
+                      >
+                        <img src="/pencil.svg" alt="" aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        className="item-action-button item-action-remove"
+                        onClick={() => removeItem(item)}
+                        aria-label={`Remove ${item.name}`}
+                        title={`Remove ${item.name}`}
+                      >
+                        <img src="/trash.svg" alt="" aria-hidden="true" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
+
+        <div className="add-item-action">
+          <button type="button" className="btn btn-primary" onClick={() => setItemDialog({ mode: 'add' })}>
+            Add item
+          </button>
+        </div>
       </div>
+
+      {itemDialog && (
+        <ItemModal
+          key={itemDialog.mode === 'edit' ? `edit-${itemDialog.item.item_id}` : 'add'}
+          item={itemDialog.mode === 'edit' ? itemDialog.item : null}
+          categories={categories.data ?? []}
+          members={members}
+          onCancel={() => setItemDialog(null)}
+          onConfirm={(changes) => saveItemDetails(itemDialog.item ?? null, changes)}
+        />
+      )}
     </>
+  )
+}
+
+function ItemModal({ item, categories, members, onCancel, onConfirm }) {
+  const isEditing = Boolean(item)
+  const dialogRef = useRef(null)
+  const [name, setName] = useState(item?.name ?? '')
+  const [categoryId, setCategoryId] = useState(item?.category_id == null ? '' : String(item.category_id))
+  const [quantity, setQuantity] = useState(String(item?.quantity ?? 1))
+  const [price, setPrice] = useState(item?.est_cost == null ? '' : String(item.est_cost))
+  const [responsibleId, setResponsibleId] = useState(
+    item?.responsible_user_id == null ? '' : String(item.responsible_user_id),
+  )
+  const [notes, setNotes] = useState(item?.notes ?? '')
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    const dialog = dialogRef.current
+    if (dialog && !dialog.open) dialog.showModal()
+    return () => {
+      if (dialog?.open) dialog.close()
+    }
+  }, [])
+
+  function close() {
+    if (!saving) onCancel()
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault()
+    setError('')
+    setSaving(true)
+    try {
+      await onConfirm({
+        name: name.trim(),
+        category_id: categoryId ? Number(categoryId) : null,
+        quantity: Number(quantity),
+        est_cost: price === '' ? null : Number(price),
+        responsible_user_id: responsibleId ? Number(responsibleId) : null,
+        notes: notes.trim() || null,
+      })
+      onCancel()
+    } catch (err) {
+      setError(err.message)
+      setSaving(false)
+    }
+  }
+
+  return createPortal(
+    <dialog
+      ref={dialogRef}
+      className="item-edit-dialog"
+      aria-labelledby="item-dialog-title"
+      aria-describedby="item-dialog-description"
+      onCancel={(event) => {
+        event.preventDefault()
+        close()
+      }}
+    >
+      <h2 id="item-dialog-title">{isEditing ? 'Edit item' : 'Add item'}</h2>
+      <p id="item-dialog-description" className="muted">
+        {isEditing ? `Update the details for ${item.name}.` : 'Add an item to your group’s list.'}
+      </p>
+
+      <form onSubmit={handleSubmit}>
+        <div className="item-edit-fields">
+          <label className="field item-edit-wide">
+            Item
+            <input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              maxLength={150}
+              required
+              autoFocus
+              spellCheck={true}
+              autoCorrect="on"
+              autoCapitalize="sentences"
+              lang="en"
+            />
+          </label>
+          <label className="field">
+            Category
+            <select value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
+              <option value="">—</option>
+              {categories.map((category) => (
+                <option key={category.category_id} value={category.category_id}>{category.name}</option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            Quantity
+            <input
+              type="number"
+              min="1"
+              step="1"
+              value={quantity}
+              onChange={(event) => setQuantity(event.target.value)}
+              required
+            />
+          </label>
+          <label className="field">
+            Est. price ({CURRENCY})
+            <MoneyInput value={price} onChange={(event) => setPrice(event.target.value)} />
+          </label>
+          <label className="field">
+            Who's getting it
+            <select value={responsibleId} onChange={(event) => setResponsibleId(event.target.value)}>
+              <option value="">Anyone</option>
+              {members.map((member) => (
+                <option key={member.user_id} value={member.user_id}>{member.name}</option>
+              ))}
+            </select>
+          </label>
+          <label className="field item-edit-wide">
+            Notes
+            <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} />
+          </label>
+        </div>
+
+        {error && <p className="form-error" role="alert">{error}</p>}
+
+        <div className="item-edit-actions">
+          <button type="button" className="btn btn-ghost" onClick={close} disabled={saving}>
+            Cancel
+          </button>
+          <button type="submit" className="btn btn-primary" disabled={saving}>
+            {saving ? 'Saving…' : isEditing ? 'Confirm' : 'Add item'}
+          </button>
+        </div>
+      </form>
+    </dialog>,
+    document.body,
   )
 }
 

@@ -7,11 +7,10 @@ check that the user is a member of it (require_member).
 import secrets
 from datetime import date
 from decimal import Decimal
-from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from psycopg import Connection
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from auth_routes import get_current_user, require_member
 from db import get_db
@@ -36,9 +35,10 @@ class JoinIn(BaseModel):
 
 
 class MemberUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     move_in_date: date | None = None
     split_weight: Decimal | None = Field(default=None, gt=0, max_digits=5, decimal_places=2)
-    role: Literal["owner", "member"] | None = None
 
 
 # Letters and digits that are hard to mix up when read aloud (no 0/O, 1/I/L).
@@ -54,16 +54,20 @@ def new_invite_code(db: Connection) -> str:
             return code
 
 
+def lock_move(move_id: int, db: Connection) -> None:
+    """Lock the group row to serialize ownership and membership changes."""
+    row = db.execute("SELECT move_id FROM moves WHERE move_id = %s FOR UPDATE", (move_id,)).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Move not found")
+
+
 def require_owner(move_id: int, user: dict, db: Connection) -> None:
-    """Raise 403 unless the user is an owner of the move (404 if not a member)."""
+    """Raise 403 unless the user is still the owner, locking out concurrent transfers."""
     if require_member(move_id, user, db) != "owner":
-        raise HTTPException(status_code=403, detail="Only the group's owners can do that")
-
-
-def count_owners(move_id: int, db: Connection) -> int:
-    return db.execute(
-        "SELECT COUNT(*) AS n FROM move_members WHERE move_id = %s AND role = 'owner'", (move_id,)
-    ).fetchone()["n"]
+        raise HTTPException(status_code=403, detail="Only the group's owner can do that")
+    lock_move(move_id, db)
+    if require_member(move_id, user, db) != "owner":
+        raise HTTPException(status_code=403, detail="Only the group's owner can do that")
 
 
 # ---------- Endpoints ----------
@@ -253,11 +257,13 @@ def update_member(
     user: dict = Depends(get_current_user),
     db: Connection = Depends(get_db),
 ):
-    """Change a member's move-in date, share (split_weight), or role.
+    """Change a member's move-in date or share (split_weight).
 
-    Owners can change anything for anyone. Members can only change their own
-    move-in date. Send null to clear the move-in date.
+    The owner can change anyone's share or move-in date. Members can only
+    change their own move-in date. Send null to clear the move-in date.
     """
+    require_member(move_id, user, db)
+    lock_move(move_id, db)
     my_role = require_member(move_id, user, db)
     target = db.execute(
         "SELECT role, move_in_date, split_weight FROM move_members WHERE move_id = %s AND user_id = %s",
@@ -267,28 +273,79 @@ def update_member(
         raise HTTPException(status_code=404, detail="That person isn't in this group")
 
     changes = body.model_dump(exclude_unset=True)
-    for required in ("split_weight", "role"):  # these can't be cleared
-        if changes.get(required) is None:
-            changes.pop(required, None)
+    if changes.get("split_weight") is None:
+        changes.pop("split_weight", None)
 
     if my_role != "owner":
         if member_id != user["user_id"] or set(changes) - {"move_in_date"}:
             raise HTTPException(
                 status_code=403,
-                detail="Only owners can change shares, roles, or other people's details",
+                detail="Only the owner can change shares or other people's details",
             )
-    if changes.get("role") == "member" and target["role"] == "owner" and count_owners(move_id, db) == 1:
-        raise HTTPException(status_code=400, detail="A group needs at least one owner")
 
     new = {**target, **changes}
     return db.execute(
         """
-        UPDATE move_members SET role = %s, move_in_date = %s, split_weight = %s
+        UPDATE move_members SET move_in_date = %s, split_weight = %s
         WHERE move_id = %s AND user_id = %s
         RETURNING user_id, role, move_in_date, split_weight
         """,
-        (new["role"], new["move_in_date"], new["split_weight"], move_id, member_id),
+        (new["move_in_date"], new["split_weight"], move_id, member_id),
     ).fetchone()
+
+
+@router.post("/{move_id}/members/{member_id}/make-owner")
+def transfer_ownership(
+    move_id: int,
+    member_id: int,
+    user: dict = Depends(get_current_user),
+    db: Connection = Depends(get_db),
+):
+    """Transfer ownership to a current member as one serialized transaction."""
+    require_owner(move_id, user, db)
+    if member_id == user["user_id"]:
+        raise HTTPException(status_code=400, detail="Choose another group member")
+
+    target = db.execute(
+        "SELECT user_id, role FROM move_members WHERE move_id = %s AND user_id = %s FOR UPDATE",
+        (move_id, member_id),
+    ).fetchone()
+    if target is None:
+        raise HTTPException(status_code=404, detail="That person isn't in this group")
+    if target["role"] == "owner":
+        raise HTTPException(status_code=409, detail="That person is already the owner")
+
+    owners = db.execute(
+        "SELECT user_id FROM move_members WHERE move_id = %s AND role = 'owner' FOR UPDATE",
+        (move_id,),
+    ).fetchall()
+    if len(owners) != 1 or owners[0]["user_id"] != user["user_id"]:
+        raise HTTPException(status_code=409, detail="This group must have exactly one owner to transfer ownership")
+
+    demoted = db.execute(
+        """
+        UPDATE move_members SET role = 'member'
+        WHERE move_id = %s AND user_id = %s AND role = 'owner'
+        RETURNING user_id
+        """,
+        (move_id, user["user_id"]),
+    ).fetchone()
+    promoted = db.execute(
+        """
+        UPDATE move_members SET role = 'owner'
+        WHERE move_id = %s AND user_id = %s AND role = 'member'
+        RETURNING user_id
+        """,
+        (move_id, member_id),
+    ).fetchone()
+    if demoted is None or promoted is None:
+        raise HTTPException(status_code=409, detail="Ownership transfer could not be completed")
+
+    return {
+        "move_id": move_id,
+        "owner_user_id": promoted["user_id"],
+        "previous_owner_user_id": demoted["user_id"],
+    }
 
 
 @router.delete("/{move_id}/members/{member_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -298,15 +355,17 @@ def remove_member(
     user: dict = Depends(get_current_user),
     db: Connection = Depends(get_db),
 ):
-    """Leave the group (your own user_id) or remove someone (owners only).
+    """Leave the group (your own user_id) or remove someone (the owner only).
 
     Their past expenses stay, so the budget's "who owes what" still adds up.
     Items they were getting go back to "Anyone".
     """
+    require_member(move_id, user, db)
+    lock_move(move_id, db)
     my_role = require_member(move_id, user, db)
     leaving = member_id == user["user_id"]
     if not leaving and my_role != "owner":
-        raise HTTPException(status_code=403, detail="Only the group's owners can remove people")
+        raise HTTPException(status_code=403, detail="Only the group's owner can remove people")
 
     target = db.execute(
         "SELECT role FROM move_members WHERE move_id = %s AND user_id = %s", (move_id, member_id)
@@ -321,9 +380,9 @@ def remove_member(
         raise HTTPException(
             status_code=400, detail="You're the only member. Delete the group instead."
         )
-    if target["role"] == "owner" and count_owners(move_id, db) == 1:
+    if target["role"] == "owner":
         raise HTTPException(
-            status_code=400, detail="Make someone else an owner first. A group needs at least one owner."
+            status_code=400, detail="Transfer ownership before leaving. A group needs exactly one owner."
         )
 
     db.execute(

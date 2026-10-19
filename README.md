@@ -98,10 +98,10 @@ or enter the parts separately: host `localhost`, port `5432`, database
 ## Status
 
 Working end to end with the database: sign up and log in; groups (create, join
-with an invite code, edit details, manage members, owners, and shares, leave or
-delete); the shared list (add, assign, check off, search, filter); category
-budgets and expenses with even, partial, or custom splits; and editing your
-profile. The dashboard is a placeholder for now, and Dolly (the AI assistant)
-isn't connected yet.
+with an invite code, edit details, manage members and shares, transfer the
+single-owner role, leave or delete); the shared list (add, assign, check off,
+search, filter); category budgets and expenses with even, partial, or custom
+splits; and editing your profile. The dashboard is a placeholder for now, and
+Dolly (the AI assistant) isn't connected yet.
 
 Planned work is tracked in [GitHub Issues](https://github.com/samstrc/move_together/issues).

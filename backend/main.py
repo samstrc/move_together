@@ -17,7 +17,7 @@ from psycopg.errors import ForeignKeyViolation
 
 from auth_routes import router as auth_router
 from budget_routes import router as budget_router
-from db import get_db, pool
+from db import ensure_single_owner_invariant, get_db, pool
 from dolly_routes import router as dolly_router
 from items_routes import router as items_router
 from moves_routes import router as moves_router
@@ -25,10 +25,13 @@ from moves_routes import router as moves_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Open the database connection pool on startup, close it on shutdown."""
+    """Open the database pool and enforce ownership rules before serving requests."""
     pool.open()
-    yield
-    pool.close()
+    try:
+        ensure_single_owner_invariant()
+        yield
+    finally:
+        pool.close()
 
 
 app = FastAPI(title="Move Together API", lifespan=lifespan)
