@@ -116,7 +116,9 @@ def add_item(
 agent = Agent[DollyContext](
     name="Dolly",
     instructions=persona,
-    tools=[add_item],
+    # add_item goes back in here once it's implemented. Until then the model
+    # could call it and hit NotImplementedError.
+    tools=[],
 )
 
 query = "Hello! Who are you? What should I eat for dinner?"

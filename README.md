@@ -102,8 +102,9 @@ with an invite code, edit details, manage members, owners, and shares, leave or
 delete); the shared list (add, assign, check off, search, filter); category
 budgets and expenses with even, partial, or custom splits; and editing your
 profile. The dashboard includes budget alerts, a database-driven budget-versus-spending
-chart, and largest/smallest expense summaries. Dolly (the AI assistant) isn't
-connected yet.
+chart, and largest/smallest expense summaries. Dolly (the AI assistant) can
+chat, and each member's chats are saved, but she can't use the group's data
+yet.
 
 Planned work is tracked in [GitHub Issues](https://github.com/samstrc/move_together/issues).
 
