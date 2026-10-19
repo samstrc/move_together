@@ -101,7 +101,43 @@ Working end to end with the database: sign up and log in; groups (create, join
 with an invite code, edit details, manage members, owners, and shares, leave or
 delete); the shared list (add, assign, check off, search, filter); category
 budgets and expenses with even, partial, or custom splits; and editing your
-profile. The dashboard is a placeholder for now, and Dolly (the AI assistant)
-isn't connected yet.
+profile. The dashboard includes budget alerts, a database-driven budget-versus-spending
+chart, and largest/smallest expense summaries. Dolly (the AI assistant) isn't
+connected yet.
 
 Planned work is tracked in [GitHub Issues](https://github.com/samstrc/move_together/issues).
+
+## Dashboard
+
+The Dashboard now includes a database-driven budget-versus-spending chart, automatic
+budget alerts, and largest and smallest expense summaries for the selected
+group.
+
+Alerts compare each category's spending with its budget:
+
+- **Below 80%:** within budget.
+- **80% through 100%:** budget warning.
+- **Above 100%:** over budget.
+
+Spending against a zero budget is treated as over budget when spending is
+greater than zero; zero spending remains within budget.
+
+The backend uses PostgreSQL aggregate functions executed by the database:
+`SUM()` for total spending, `MAX()` for the largest expense, and `MIN()` for
+the smallest expense. Results are scoped to the selected move; expense
+summaries return zero when there are no expenses.
+
+## Updating frontend dependencies
+
+Recharts is recorded in `frontend/package.json` and
+`frontend/package-lock.json`, so team members should not install a separate
+hard-coded version. After pulling dependency changes, run these commands
+from the project root:
+
+```
+docker compose up -d --build
+docker compose exec web npm install
+docker compose restart web
+```
+
+Do not commit `node_modules`.
