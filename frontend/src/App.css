@@ -666,6 +666,8 @@ tr.is-done .item-name-cell {
   padding: 10px 14px;
   border-radius: 12px;
   font-size: 16px;
+  /* Keep the line breaks in Dolly's replies */
+  white-space: pre-wrap;
 }
 
 .chat-bubble.assistant {

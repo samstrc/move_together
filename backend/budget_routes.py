@@ -140,6 +140,7 @@ def budget_summary(
 
     - categories: budget vs. spent for each category that has either
     - totals: overall budget and spending
+    - expense_stats: largest and smallest expense amounts for this move
     - members: what each person paid, their share, and their balance
       (positive = the group owes them, negative = they owe the group)
     """
@@ -166,6 +167,16 @@ def budget_summary(
         """
         SELECT (SELECT COALESCE(SUM(amount), 0) FROM budgets  WHERE move_id = %(move_id)s) AS budget,
                (SELECT COALESCE(SUM(amount), 0) FROM expenses WHERE move_id = %(move_id)s) AS spent
+        """,
+        params,
+    ).fetchone()
+
+    expense_stats = db.execute(
+        """
+        SELECT COALESCE(MAX(amount), 0) AS maximum,
+               COALESCE(MIN(amount), 0) AS minimum
+        FROM expenses
+        WHERE move_id = %(move_id)s
         """,
         params,
     ).fetchone()
@@ -211,6 +222,7 @@ def budget_summary(
     return {
         "categories": categories,
         "totals": totals,
+        "expense_stats": expense_stats,
         "members": members,
         "settle_up": suggest_payments(members),
     }
