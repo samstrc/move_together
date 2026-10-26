@@ -8,6 +8,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from psycopg import Connection, sql
+from psycopg.rows import DictRow
 from pydantic import BaseModel, Field
 
 from auth_routes import get_current_user, require_member
@@ -62,7 +63,7 @@ class ItemUpdate(BaseModel):
     notes: str | None = None
 
 
-def check_references(move_id: int, fields: dict, db: Connection) -> None:
+def check_references(move_id: int, fields: dict, db: Connection[DictRow]) -> None:
     """Make sure a room or responsible person belongs to this same move.
 
     (Foreign keys only check that the row exists somewhere, not that it's
@@ -84,7 +85,7 @@ def check_references(move_id: int, fields: dict, db: Connection) -> None:
             raise HTTPException(status_code=400, detail="That person isn't in this group")
 
 
-def get_item(move_id: int, item_id: int, db: Connection) -> dict:
+def get_item(move_id: int, item_id: int, db: Connection[DictRow]) -> dict:
     item = db.execute(
         ITEM_SELECT + " WHERE i.move_id = %s AND i.item_id = %s", (move_id, item_id)
     ).fetchone()
@@ -96,7 +97,7 @@ def get_item(move_id: int, item_id: int, db: Connection) -> dict:
 # ---------- Endpoints ----------
 
 @router.get("/categories")
-def list_categories(db: Connection = Depends(get_db)):
+def list_categories(db: Connection[DictRow] = Depends(get_db)):
     """The fixed category list (Kitchen, Furniture, ...), for dropdowns."""
     return db.execute("SELECT category_id, name FROM categories ORDER BY name").fetchall()
 
@@ -109,7 +110,7 @@ def list_items(
     category_id: int | None = None,
     responsible_user_id: int | None = None,
     user: dict = Depends(get_current_user),
-    db: Connection = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db),
 ):
     """The shared list, newest first. All filters are optional:
 
@@ -148,7 +149,7 @@ def add_item(
     move_id: int,
     body: ItemIn,
     user: dict = Depends(get_current_user),
-    db: Connection = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db),
 ):
     """Add an item to the list. added_by is set to the logged-in user."""
     require_member(move_id, user, db)
@@ -163,6 +164,7 @@ def add_item(
         (move_id, body.name.strip(), body.category_id, body.room_id, body.quantity,
          body.est_cost, body.responsible_user_id, user["user_id"], body.notes),
     ).fetchone()
+    assert row is not None  # INSERT ... RETURNING always returns the row
     return get_item(move_id, row["item_id"], db)
 
 
@@ -172,7 +174,7 @@ def update_item(
     item_id: int,
     body: ItemUpdate,
     user: dict = Depends(get_current_user),
-    db: Connection = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db),
 ):
     """Change any of an item's fields, e.g. {"status": "bought"}.
 
@@ -206,7 +208,7 @@ def delete_item(
     move_id: int,
     item_id: int,
     user: dict = Depends(get_current_user),
-    db: Connection = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db),
 ):
     """Remove an item. Expenses that pointed to it are kept (item_id becomes NULL)."""
     require_member(move_id, user, db)

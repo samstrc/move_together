@@ -19,6 +19,7 @@ from decimal import ROUND_DOWN, Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from psycopg import Connection
+from psycopg.rows import DictRow
 from pydantic import BaseModel, Field
 
 from auth_routes import get_current_user, require_member
@@ -134,7 +135,7 @@ def work_out_splits(body: ExpenseIn, members: list[dict]) -> list[tuple[int, Dec
 def budget_summary(
     move_id: int,
     user: dict = Depends(get_current_user),
-    db: Connection = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db),
 ):
     """Everything the Budget page needs:
 
@@ -234,7 +235,7 @@ def set_budget(
     category_id: int,
     body: BudgetIn,
     user: dict = Depends(get_current_user),
-    db: Connection = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db),
 ):
     """Set (or replace) the budget for one category."""
     require_member(move_id, user, db)
@@ -253,7 +254,7 @@ def remove_budget(
     move_id: int,
     category_id: int,
     user: dict = Depends(get_current_user),
-    db: Connection = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db),
 ):
     """Remove a category's budget (its expenses are kept)."""
     require_member(move_id, user, db)
@@ -267,7 +268,7 @@ def remove_budget(
 def list_expenses(
     move_id: int,
     user: dict = Depends(get_current_user),
-    db: Connection = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db),
 ):
     """All expenses for the move, newest first."""
     require_member(move_id, user, db)
@@ -299,7 +300,7 @@ def log_expense(
     move_id: int,
     body: ExpenseIn,
     user: dict = Depends(get_current_user),
-    db: Connection = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db),
 ):
     """Log an expense and split it (see the top of this file for the options)."""
     require_member(move_id, user, db)
@@ -329,6 +330,7 @@ def log_expense(
         (move_id, body.item_id, body.category_id, body.description.strip(),
          body.amount, paid_by, body.expense_date),
     ).fetchone()
+    assert expense is not None  # INSERT ... RETURNING always returns the row
 
     with db.cursor() as cur:
         cur.executemany(
@@ -343,7 +345,7 @@ def delete_expense(
     move_id: int,
     expense_id: int,
     user: dict = Depends(get_current_user),
-    db: Connection = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db),
 ):
     """Delete an expense (its splits are deleted with it)."""
     require_member(move_id, user, db)
@@ -360,7 +362,7 @@ def delete_expense(
 def list_settlements(
     move_id: int,
     user: dict = Depends(get_current_user),
-    db: Connection = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db),
 ):
     """Payments recorded between people, newest first."""
     require_member(move_id, user, db)
@@ -386,7 +388,7 @@ def record_settlement(
     move_id: int,
     body: SettlementIn,
     user: dict = Depends(get_current_user),
-    db: Connection = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db),
 ):
     """Record that one person paid another back (e.g. after "Mark as paid").
 
@@ -429,7 +431,7 @@ def delete_settlement(
     move_id: int,
     settlement_id: int,
     user: dict = Depends(get_current_user),
-    db: Connection = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db),
 ):
     """Undo a recorded payment. Only the payer or the person paid can undo it."""
     require_member(move_id, user, db)

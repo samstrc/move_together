@@ -8,9 +8,10 @@ can't see it. Dolly's tools work with the database directly through
 DollyContext, so they only ever see the move checked here.
 """
 
-from agents import Runner
+from agents import Runner, TResponseInputItem
 from fastapi import APIRouter, Depends, HTTPException, status
 from psycopg import Connection
+from psycopg.rows import DictRow
 from pydantic import BaseModel, Field
 
 from auth_routes import get_current_user, require_member
@@ -32,7 +33,7 @@ class ChatOut(BaseModel):
     reply: str
 
 
-def get_conversation(move_id: int, conversation_id: int, user: dict, db: Connection) -> dict:
+def get_conversation(move_id: int, conversation_id: int, user: dict, db: Connection[DictRow]) -> dict:
     """Return the conversation, or 404 if it isn't this user's chat in this move."""
     conversation = db.execute(
         """
@@ -51,7 +52,7 @@ def get_conversation(move_id: int, conversation_id: int, user: dict, db: Connect
 def list_conversations(
     move_id: int,
     user: dict = Depends(get_current_user),
-    db: Connection = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db),
 ):
     """Your chats with Dolly in this move, newest first."""
     require_member(move_id, user, db)
@@ -70,7 +71,7 @@ def list_conversations(
 def start_conversation(
     move_id: int,
     user: dict = Depends(get_current_user),
-    db: Connection = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db),
 ):
     """Start a new, empty chat. Its title is set from the first message."""
     require_member(move_id, user, db)
@@ -89,7 +90,7 @@ def list_messages(
     move_id: int,
     conversation_id: int,
     user: dict = Depends(get_current_user),
-    db: Connection = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db),
 ):
     """Every message in a chat, oldest first. Tool actions are left out."""
     require_member(move_id, user, db)
@@ -114,7 +115,7 @@ def send_message(
     conversation_id: int,
     body: ChatIn,
     user: dict = Depends(get_current_user),
-    db: Connection = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db),
 ):
     """Send Dolly a message and get her reply. Both are saved to the chat.
 
@@ -124,10 +125,9 @@ def send_message(
     require_member(move_id, user, db)
     get_conversation(move_id, conversation_id, user, db)
 
-    # The newest HISTORY_LIMIT messages, flipped back to oldest first. Rows come
-    # back as {"role": ..., "content": ...}, which is the input format the
-    # Agents SDK expects. Tool rows are left out: they aren't chat messages.
-    history = db.execute(
+    # The newest HISTORY_LIMIT messages, flipped back to oldest first. Tool rows
+    # are left out: they aren't chat messages.
+    rows = db.execute(
         """
         SELECT role, content FROM (
             SELECT role, content, created_at, message_id
@@ -140,6 +140,11 @@ def send_message(
         """,
         (conversation_id, HISTORY_LIMIT),
     ).fetchall()
+    # The Agents SDK takes messages as {"role": ..., "content": ...}.
+    messages: list[TResponseInputItem] = [
+        {"role": row["role"], "content": row["content"]} for row in rows
+    ]
+    messages.append({"role": "user", "content": body.message})
 
     db.execute(
         "INSERT INTO ai_messages (conversation_id, role, content) VALUES (%s, 'user', %s)",
@@ -149,9 +154,7 @@ def send_message(
     context = DollyContext(db=db, move_id=move_id, user=user)
     # run_sync is fine here: FastAPI runs plain `def` endpoints in a worker
     # thread, and it keeps the database calls in Dolly's tools synchronous.
-    result = Runner.run_sync(
-        agent, history + [{"role": "user", "content": body.message}], context=context
-    )
+    result = Runner.run_sync(agent, messages, context=context)
     reply = result.final_output
 
     db.execute(
