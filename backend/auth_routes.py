@@ -24,6 +24,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from psycopg import Connection
 from psycopg.errors import UniqueViolation
+from psycopg.rows import DictRow
 from pwdlib import PasswordHash
 from pydantic import BaseModel, EmailStr, Field
 
@@ -98,7 +99,7 @@ def create_token(user_id: int) -> str:
 
 def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
-    db: Connection = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db),
 ) -> dict:
     """Dependency: the logged-in user, or a 401 error.
 
@@ -128,7 +129,7 @@ def get_current_user(
     return user
 
 
-def require_member(move_id: int, user: dict, db: Connection) -> str:
+def require_member(move_id: int, user: dict, db: Connection[DictRow]) -> str:
     """Raise 404 unless the user belongs to the move; otherwise return their
     role ('owner' or 'member').
 
@@ -146,7 +147,7 @@ def require_member(move_id: int, user: dict, db: Connection) -> str:
 # ---------- Endpoints ----------
 
 @router.post("/signup", response_model=TokenOut, status_code=status.HTTP_201_CREATED)
-def signup(body: SignupIn, db: Connection = Depends(get_db)):
+def signup(body: SignupIn, db: Connection[DictRow] = Depends(get_db)):
     """Create an account and log in right away."""
     try:
         user = db.execute(
@@ -162,11 +163,12 @@ def signup(body: SignupIn, db: Connection = Depends(get_db)):
             status_code=status.HTTP_409_CONFLICT,
             detail="An account with that email already exists",
         )
+    assert user is not None  # INSERT ... RETURNING always returns the row
     return {"access_token": create_token(user["user_id"]), "user": user}
 
 
 @router.post("/login", response_model=TokenOut)
-def login(body: LoginIn, db: Connection = Depends(get_db)):
+def login(body: LoginIn, db: Connection[DictRow] = Depends(get_db)):
     """Check email + password and return an access token."""
     row = db.execute(
         "SELECT user_id, name, email, password_hash FROM users WHERE email = %s",
@@ -185,6 +187,7 @@ def login(body: LoginIn, db: Connection = Depends(get_db)):
             detail="Invalid email or password",
         )
 
+    assert row is not None  # a missing account is never valid
     user = {k: row[k] for k in ("user_id", "name", "email")}
     return {"access_token": create_token(user["user_id"]), "user": user}
 
@@ -199,7 +202,7 @@ def me(user: dict = Depends(get_current_user)):
 def update_me(
     body: ProfileUpdate,
     user: dict = Depends(get_current_user),
-    db: Connection = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db),
 ):
     """Change your name and/or email. Leave a field out to keep it."""
     name = body.name.strip() if body.name is not None else user["name"]
@@ -224,12 +227,13 @@ def update_me(
 def change_password(
     body: PasswordChange,
     user: dict = Depends(get_current_user),
-    db: Connection = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db),
 ):
     """Change your password. Requires the current one."""
     row = db.execute(
         "SELECT password_hash FROM users WHERE user_id = %s", (user["user_id"],)
     ).fetchone()
+    assert row is not None  # get_current_user already found this user
     if not password_hash.verify(body.current_password, row["password_hash"]):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

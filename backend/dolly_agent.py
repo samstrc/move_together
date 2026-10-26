@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from agents import Agent, RunContextWrapper, Runner, function_tool, set_default_openai_key
 from dotenv import load_dotenv
 from psycopg import Connection
+from psycopg.rows import DictRow
 
 load_dotenv()
 # backend/.env names the key LLM_API_KEY; the SDK would otherwise look for OPENAI_API_KEY.
@@ -77,7 +78,7 @@ class DollyContext:
     membership, so tools can trust move_id and only touch this group's data.
     The model never sees it.
     """
-    db: Connection
+    db: Connection[DictRow]
     move_id: int
     user: dict  # the logged-in user: user_id, name, email
 

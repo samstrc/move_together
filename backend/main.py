@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from psycopg import Connection
 from psycopg.errors import ForeignKeyViolation
+from psycopg.rows import DictRow
 
 from auth_routes import router as auth_router
 from budget_routes import router as budget_router
@@ -55,7 +56,7 @@ def foreign_key_error(request: Request, exc: ForeignKeyViolation):
 
 
 @app.get("/")
-def health_check(db: Connection = Depends(get_db)):
+def health_check(db: Connection[DictRow] = Depends(get_db)):
     """Quick way to check the server and database are running."""
     db.execute("SELECT 1")
     return {"status": "ok", "database": "ok"}

@@ -10,6 +10,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from psycopg import Connection
+from psycopg.rows import DictRow
 from pydantic import BaseModel, ConfigDict, Field
 
 from auth_routes import get_current_user, require_member
@@ -45,7 +46,7 @@ class MemberUpdate(BaseModel):
 CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 
 
-def new_invite_code(db: Connection) -> str:
+def new_invite_code(db: Connection[DictRow]) -> str:
     """A random, unused code like MOVE-7KQ2."""
     while True:
         code = "MOVE-" + "".join(secrets.choice(CODE_ALPHABET) for _ in range(4))
@@ -54,14 +55,14 @@ def new_invite_code(db: Connection) -> str:
             return code
 
 
-def lock_move(move_id: int, db: Connection) -> None:
+def lock_move(move_id: int, db: Connection[DictRow]) -> None:
     """Lock the group row to serialize ownership and membership changes."""
     row = db.execute("SELECT move_id FROM moves WHERE move_id = %s FOR UPDATE", (move_id,)).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail="Move not found")
 
 
-def require_owner(move_id: int, user: dict, db: Connection) -> None:
+def require_owner(move_id: int, user: dict, db: Connection[DictRow]) -> None:
     """Raise 403 unless the user is still the owner, locking out concurrent transfers."""
     if require_member(move_id, user, db) != "owner":
         raise HTTPException(status_code=403, detail="Only the group's owner can do that")
@@ -73,7 +74,7 @@ def require_owner(move_id: int, user: dict, db: Connection) -> None:
 # ---------- Endpoints ----------
 
 @router.get("")
-def list_my_moves(user: dict = Depends(get_current_user), db: Connection = Depends(get_db)):
+def list_my_moves(user: dict = Depends(get_current_user), db: Connection[DictRow] = Depends(get_db)):
     """Every move the logged-in user belongs to, soonest move date first."""
     return db.execute(
         """
@@ -92,7 +93,7 @@ def list_my_moves(user: dict = Depends(get_current_user), db: Connection = Depen
 def create_move(
     body: MoveIn,
     user: dict = Depends(get_current_user),
-    db: Connection = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db),
 ):
     """Create a move. The creator becomes its owner, and it gets an invite code."""
     move = db.execute(
@@ -103,6 +104,7 @@ def create_move(
         """,
         (body.name.strip(), body.destination, body.target_date, user["user_id"]),
     ).fetchone()
+    assert move is not None  # INSERT ... RETURNING always returns the row
     db.execute(
         "INSERT INTO move_members (move_id, user_id, role) VALUES (%s, %s, 'owner')",
         (move["move_id"], user["user_id"]),
@@ -118,7 +120,7 @@ def create_move(
 def join_move(
     body: JoinIn,
     user: dict = Depends(get_current_user),
-    db: Connection = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db),
 ):
     """Join a move with its invite code (e.g. MOVE-4821)."""
     invite = db.execute(
@@ -151,7 +153,7 @@ def join_move(
 def get_move(
     move_id: int,
     user: dict = Depends(get_current_user),
-    db: Connection = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db),
 ):
     """Move details, its members, and the code for inviting people."""
     role = require_member(move_id, user, db)
@@ -159,6 +161,7 @@ def get_move(
         "SELECT move_id, name, destination, target_date FROM moves WHERE move_id = %s",
         (move_id,),
     ).fetchone()
+    assert move is not None  # require_member already found the move
     move["my_role"] = role
     move["members"] = db.execute(
         """
@@ -190,7 +193,7 @@ def update_move(
     move_id: int,
     body: MoveUpdate,
     user: dict = Depends(get_current_user),
-    db: Connection = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db),
 ):
     """Edit the move's name, destination, or date. Any member can do this.
 
@@ -203,6 +206,7 @@ def update_move(
     current = db.execute(
         "SELECT name, destination, target_date FROM moves WHERE move_id = %s", (move_id,)
     ).fetchone()
+    assert current is not None  # require_member already found the move
     new = {**current, **changes}
     return db.execute(
         """
@@ -218,7 +222,7 @@ def update_move(
 def delete_move(
     move_id: int,
     user: dict = Depends(get_current_user),
-    db: Connection = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db),
 ):
     """Delete the whole group and everything in it. Owners only."""
     require_owner(move_id, user, db)
@@ -230,7 +234,7 @@ def delete_move(
 def new_code(
     move_id: int,
     user: dict = Depends(get_current_user),
-    db: Connection = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db),
 ):
     """Replace the invite code (the old one stops working). Owners only."""
     require_owner(move_id, user, db)
@@ -255,7 +259,7 @@ def update_member(
     member_id: int,
     body: MemberUpdate,
     user: dict = Depends(get_current_user),
-    db: Connection = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db),
 ):
     """Change a member's move-in date or share (split_weight).
 
@@ -299,7 +303,7 @@ def transfer_ownership(
     move_id: int,
     member_id: int,
     user: dict = Depends(get_current_user),
-    db: Connection = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db),
 ):
     """Transfer ownership to a current member as one serialized transaction."""
     require_owner(move_id, user, db)
@@ -353,7 +357,7 @@ def remove_member(
     move_id: int,
     member_id: int,
     user: dict = Depends(get_current_user),
-    db: Connection = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db),
 ):
     """Leave the group (your own user_id) or remove someone (the owner only).
 
@@ -373,10 +377,11 @@ def remove_member(
     if target is None:
         raise HTTPException(status_code=404, detail="That person isn't in this group")
 
-    member_count = db.execute(
+    row = db.execute(
         "SELECT COUNT(*) AS n FROM move_members WHERE move_id = %s", (move_id,)
-    ).fetchone()["n"]
-    if member_count == 1:
+    ).fetchone()
+    assert row is not None  # COUNT(*) always returns a row
+    if row["n"] == 1:
         raise HTTPException(
             status_code=400, detail="You're the only member. Delete the group instead."
         )
