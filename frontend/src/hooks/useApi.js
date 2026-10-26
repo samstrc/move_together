@@ -34,5 +34,5 @@ export function useApi(path) {
 
   const reload = useCallback(() => setReloadCount((count) => count + 1), [])
 
-  return { data, error, loading: data === null && !error, reload }
+  return { data, setData, error, loading: data === null && !error, reload }
 }

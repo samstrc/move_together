@@ -4,7 +4,7 @@ import { Link, NavLink } from 'react-router-dom'
 // NavLink adds the "active" class to the link for the page you're on.
 const links = [
   { to: '/dashboard', label: 'Dashboard' },
-  { to: '/items', label: 'Shared list' },
+  { to: '/items', label: 'Shared List' },
   { to: '/budget', label: 'Budget' },
   { to: '/assistant', label: 'Dolly' },
   { to: '/group', label: 'Group' },

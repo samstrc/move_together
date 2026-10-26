@@ -25,7 +25,7 @@ from moves_routes import router as moves_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Open the database connection pool on startup, close it on shutdown."""
+    """Open the database connection pool, then close it on shutdown."""
     pool.open()
     yield
     pool.close()

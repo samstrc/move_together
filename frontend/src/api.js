@@ -24,6 +24,8 @@ export async function api(path, { method = 'GET', body } = {}) {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
+    // API reads represent live group state; don't reuse a cached list after a mutation.
+    cache: method === 'GET' ? 'no-store' : 'default',
   })
   // Some responses have no body (e.g. 204 after a delete), and a server crash
   // sends plain text instead of JSON, so only parse JSON when there is some.
