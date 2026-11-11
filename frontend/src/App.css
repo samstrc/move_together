@@ -764,6 +764,58 @@ tr.is-done .item-name-cell {
   flex: 1;
 }
 
+/* Product and list cards under Dolly's replies */
+.dolly-card {
+  align-self: flex-start;
+  max-width: 75%;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card-bg);
+  font-size: 15px;
+}
+
+.dolly-card-small {
+  padding: 8px 12px;
+}
+
+.dolly-card p {
+  margin: 0;
+}
+
+.dolly-card-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--blue-strong);
+}
+
+.dolly-card-title {
+  display: block;
+  margin: 2px 0;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.dolly-card-meta {
+  color: var(--text);
+}
+
+.dolly-card-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 10px;
+}
+
+.dolly-card-added {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1a7f4b;
+}
+
 /* ---------- Group ---------- */
 .invite-code {
   font-family: ui-monospace, Consolas, monospace;
@@ -1191,9 +1243,11 @@ tr.is-done .item-name-cell {
     min-height: 60svh;
   }
 
-  .chat-bubble {
+  .chat-bubble,
+  .dolly-card {
     max-width: 90%;
   }
+
 
   .item-edit-dialog {
     padding: 16px;

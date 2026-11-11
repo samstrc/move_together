@@ -99,7 +99,7 @@ def create_token(user_id: int) -> str:
 
 def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
-    db: Connection[DictRow] = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db, scope="function"),
 ) -> dict:
     """Dependency: the logged-in user, or a 401 error.
 
@@ -147,7 +147,7 @@ def require_member(move_id: int, user: dict, db: Connection[DictRow]) -> str:
 # ---------- Endpoints ----------
 
 @router.post("/signup", response_model=TokenOut, status_code=status.HTTP_201_CREATED)
-def signup(body: SignupIn, db: Connection[DictRow] = Depends(get_db)):
+def signup(body: SignupIn, db: Connection[DictRow] = Depends(get_db, scope="function")):
     """Create an account and log in right away."""
     try:
         user = db.execute(
@@ -168,7 +168,7 @@ def signup(body: SignupIn, db: Connection[DictRow] = Depends(get_db)):
 
 
 @router.post("/login", response_model=TokenOut)
-def login(body: LoginIn, db: Connection[DictRow] = Depends(get_db)):
+def login(body: LoginIn, db: Connection[DictRow] = Depends(get_db, scope="function")):
     """Check email + password and return an access token."""
     row = db.execute(
         "SELECT user_id, name, email, password_hash FROM users WHERE email = %s",
@@ -202,7 +202,7 @@ def me(user: dict = Depends(get_current_user)):
 def update_me(
     body: ProfileUpdate,
     user: dict = Depends(get_current_user),
-    db: Connection[DictRow] = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db, scope="function"),
 ):
     """Change your name and/or email. Leave a field out to keep it."""
     name = body.name.strip() if body.name is not None else user["name"]
@@ -227,7 +227,7 @@ def update_me(
 def change_password(
     body: PasswordChange,
     user: dict = Depends(get_current_user),
-    db: Connection[DictRow] = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db, scope="function"),
 ):
     """Change your password. Requires the current one."""
     row = db.execute(

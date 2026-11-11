@@ -135,7 +135,7 @@ def work_out_splits(body: ExpenseIn, members: list[dict]) -> list[tuple[int, Dec
 def budget_summary(
     move_id: int,
     user: dict = Depends(get_current_user),
-    db: Connection[DictRow] = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db, scope="function"),
 ):
     """Everything the Budget page needs:
 
@@ -235,7 +235,7 @@ def set_budget(
     category_id: int,
     body: BudgetIn,
     user: dict = Depends(get_current_user),
-    db: Connection[DictRow] = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db, scope="function"),
 ):
     """Set (or replace) the budget for one category."""
     require_member(move_id, user, db)
@@ -254,7 +254,7 @@ def remove_budget(
     move_id: int,
     category_id: int,
     user: dict = Depends(get_current_user),
-    db: Connection[DictRow] = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db, scope="function"),
 ):
     """Remove a category's budget (its expenses are kept)."""
     require_member(move_id, user, db)
@@ -268,7 +268,7 @@ def remove_budget(
 def list_expenses(
     move_id: int,
     user: dict = Depends(get_current_user),
-    db: Connection[DictRow] = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db, scope="function"),
 ):
     """All expenses for the move, newest first."""
     require_member(move_id, user, db)
@@ -300,7 +300,7 @@ def log_expense(
     move_id: int,
     body: ExpenseIn,
     user: dict = Depends(get_current_user),
-    db: Connection[DictRow] = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db, scope="function"),
 ):
     """Log an expense and split it (see the top of this file for the options)."""
     require_member(move_id, user, db)
@@ -345,7 +345,7 @@ def delete_expense(
     move_id: int,
     expense_id: int,
     user: dict = Depends(get_current_user),
-    db: Connection[DictRow] = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db, scope="function"),
 ):
     """Delete an expense (its splits are deleted with it)."""
     require_member(move_id, user, db)
@@ -362,7 +362,7 @@ def delete_expense(
 def list_settlements(
     move_id: int,
     user: dict = Depends(get_current_user),
-    db: Connection[DictRow] = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db, scope="function"),
 ):
     """Payments recorded between people, newest first."""
     require_member(move_id, user, db)
@@ -388,7 +388,7 @@ def record_settlement(
     move_id: int,
     body: SettlementIn,
     user: dict = Depends(get_current_user),
-    db: Connection[DictRow] = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db, scope="function"),
 ):
     """Record that one person paid another back (e.g. after "Mark as paid").
 
@@ -431,7 +431,7 @@ def delete_settlement(
     move_id: int,
     settlement_id: int,
     user: dict = Depends(get_current_user),
-    db: Connection[DictRow] = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db, scope="function"),
 ):
     """Undo a recorded payment. Only the payer or the person paid can undo it."""
     require_member(move_id, user, db)

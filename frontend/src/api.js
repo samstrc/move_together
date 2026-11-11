@@ -50,3 +50,50 @@ export async function api(path, { method = 'GET', body } = {}) {
   }
   return data
 }
+
+// Like api(), but for an endpoint that streams Server-Sent Events (Dolly's
+// replies). Calls onEvent(event) for each event as it arrives, e.g.
+// { type: 'delta', text: 'Hi' }, and resolves once the stream ends.
+//
+// (The browser's EventSource can't send a POST body or our login header,
+// so this reads the response body as it downloads instead.)
+export async function streamApi(path, { body, onEvent }) {
+  const headers = { 'Content-Type': 'application/json' }
+  const token = getToken()
+  if (token) headers.Authorization = `Bearer ${token}`
+
+  const response = await fetch(API_URL + path, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  })
+  if (!response.ok) {
+    // Errors before the stream starts (not logged in, not in the group, ...)
+    // are ordinary JSON errors.
+    let detail
+    try {
+      detail = (await response.json()).detail
+    } catch {
+      // Not JSON
+    }
+    const message = Array.isArray(detail) ? detail.map((d) => d.msg).join(', ') : detail
+    const error = new Error(message || 'Something went wrong')
+    error.status = response.status
+    throw error
+  }
+
+  // Each event is a "data: {...}" line followed by a blank line. A chunk of
+  // the download can end mid-event, so keep the unfinished part for later.
+  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
+  let buffer = ''
+  for (;;) {
+    const { value, done } = await reader.read()
+    if (done) break
+    buffer += value
+    const events = buffer.split('\n\n')
+    buffer = events.pop()
+    for (const chunk of events) {
+      if (chunk.startsWith('data: ')) onEvent(JSON.parse(chunk.slice(6)))
+    }
+  }
+}
