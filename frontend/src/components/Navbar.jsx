@@ -1,11 +1,13 @@
 import { Link } from 'react-router-dom'
+import { Mark } from './Icons.jsx'
 
 // Top bar for the public pages (home, log in, sign up).
 function Navbar() {
   return (
-    <header className="navbar">
+    <header className="navbar glass glass-strong">
       <Link to="/" className="brand">
-        Move Together
+        <Mark size={32} />
+        <span className="brand-text">Move Together</span>
       </Link>
 
       <nav className="nav-actions">

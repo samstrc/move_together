@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react'
-import { Navigate, Outlet, useNavigate } from 'react-router-dom'
+import { useCallback, useEffect, useState } from 'react'
+import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import Sidebar from '../components/Sidebar.jsx'
+import MobileNav from '../components/MobileNav.jsx'
+import AccountMenu from '../components/AccountMenu.jsx'
 import { api, clearToken, getToken } from '../api.js'
 import { useApi } from '../hooks/useApi.js'
 
@@ -22,6 +24,16 @@ function loadSavedMoveId() {
 // `move` is the selected group, or null if you aren't in any group yet.
 function AppLayout() {
   const navigate = useNavigate()
+  const { pathname } = useLocation()
+  // The button that opened the group + account menu, or null when it's closed.
+  const [menuAnchor, setMenuAnchor] = useState(null)
+  const closeMenu = useCallback(() => setMenuAnchor(null), [])
+  // Going to another page (e.g. the browser's Back button) closes the menu.
+  const [menuPath, setMenuPath] = useState(pathname)
+  if (menuPath !== pathname) {
+    setMenuPath(pathname)
+    setMenuAnchor(null)
+  }
   const loggedIn = Boolean(getToken())
   const [user, setUser] = useState(null)
   const [selectedMoveId, setSelectedMoveId] = useState(loadSavedMoveId)
@@ -73,11 +85,32 @@ function AppLayout() {
     content = <Outlet context={{ user, setUser, moves, move, selectMove, reloadMoves, logOut }} />
   }
 
+  // Which button opened the menu (its data-menu), so only that one shows as open.
+  const openMenuId = menuAnchor?.dataset.menu ?? null
+  const openMenu = (button) => setMenuAnchor(menuAnchor ? null : button)
+
+  // Dolly's page fills the screen (its messages scroll inside the chat).
+  const fullHeight = pathname.startsWith('/assistant')
+
   return (
-    <div className="app-shell">
-      <Sidebar user={user} moves={moves ?? []} move={move} onSelectMove={selectMove} onLogOut={logOut} />
-      <main className="app-content">{content}</main>
-    </div>
+    <>
+      <MobileNav move={move} openMenu={openMenuId} onOpenMenu={openMenu} />
+      <div className="app-shell">
+        <Sidebar user={user} move={move} openMenu={openMenuId} onOpenMenu={openMenu} onLogOut={logOut} />
+        <main className={fullHeight ? 'app-content full-height' : 'app-content'}>
+          {/* Keyed by page so each page eases in when you navigate */}
+          <div className="page" key={pathname}>{content}</div>
+        </main>
+      </div>
+      <AccountMenu
+        anchor={menuAnchor}
+        onClose={closeMenu}
+        moves={moves ?? []}
+        move={move}
+        onSelectMove={selectMove}
+        onLogOut={logOut}
+      />
+    </>
   )
 }
 
