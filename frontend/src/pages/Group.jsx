@@ -13,7 +13,13 @@ import { formatDate } from '../utils/format.js'
 //   - The owner: also change anyone's share, transfer ownership, remove people,
 //     get a new invite code, and delete the group.
 function Group() {
-  const { user, move, selectMove, reloadMoves } = useOutletContext()
+  const context = useOutletContext()
+  // A different group starts with fresh forms, so an open "Edit details"
+  // form can't save one group's name onto another.
+  return <GroupContent key={context.move?.move_id ?? 'no-group'} {...context} />
+}
+
+function GroupContent({ user, move, selectMove, reloadMoves }) {
   const details = useApi(move ? `/moves/${move.move_id}` : null)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
