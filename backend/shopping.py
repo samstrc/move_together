@@ -4,8 +4,8 @@ prices. Used by Dolly's tools in dolly_agent.py.
 Each function takes the database connection and the move_id that the caller
 already checked the user belongs to, and only touches that move's data.
 
-save_product returns a "card": a small dict with a "type" that the Dolly page
-draws as a box under her reply.
+save_products returns a "card": a small dict with a "type" that the Dolly
+page draws as a box under her reply.
 """
 
 import json
@@ -92,53 +92,99 @@ def is_listing_page(url: str) -> bool:
     return bool(parts & LISTING_PARTS) and not parts & PRODUCT_PARTS
 
 
-def save_product(db: Connection[DictRow], move_id: int, item_id: int | None, title: str,
-                 retailer: str, url: str, price: Decimal, item_name: str | None = None,
-                 category_id: int | None = None) -> dict:
-    """Save a real product with its current price. The same URL is one
-    product, so saving it again just adds a new price.
-
-    With item_id, it becomes an option for that list item. Without one (it's
-    for something not on the list yet), item_name and category_id say what
-    the item would be: the card's "Add to list" button adds it, with this
-    product as an option (see add_item in items_routes.py).
+def product_in_move(db: Connection[DictRow], move_id: int, product_id: int) -> bool:
+    """Whether this group has seen this product: it's an option or the pick
+    for one of their items, or it was on one of Dolly's cards in their chats.
+    Products are shared between groups, so without this check a request could
+    pick any product in the database by its ID.
     """
+    row = db.execute(
+        """
+        SELECT EXISTS (
+                   SELECT 1 FROM item_product_options o JOIN items i ON i.item_id = o.item_id
+                   WHERE i.move_id = %(m)s AND o.product_id = %(p)s)
+            OR EXISTS (
+                   SELECT 1 FROM items WHERE move_id = %(m)s AND selected_product_id = %(p)s)
+            OR EXISTS (
+                   SELECT 1 FROM ai_messages am
+                   JOIN ai_conversations c ON c.conversation_id = am.conversation_id
+                   WHERE c.move_id = %(m)s AND am.role = 'tool' AND am.content IS NOT NULL
+                     AND (am.content::jsonb -> 'options' @> jsonb_build_array(jsonb_build_object('product_id', %(p)s::int))
+                          OR am.content::jsonb ->> 'product_id' = %(p)s::text
+                          OR am.content::jsonb -> 'item' ->> 'product_id' = %(p)s::text)) AS ok
+        """,
+        {"m": move_id, "p": product_id},
+    ).fetchone()
+    return bool(row and row["ok"])
+
+
+def require_product_in_move(db: Connection[DictRow], move_id: int, product_id: int) -> None:
+    """400 unless this group has seen the product (see product_in_move)."""
+    if not product_in_move(db, move_id, product_id):
+        raise HTTPException(400, "That product isn't one of your group's options")
+
+
+def check_product_link(url: str) -> None:
+    """400 unless the link is one product's own page."""
     if not url.startswith(("https://", "http://")):
         raise HTTPException(400, "The product link must start with https://")
     if is_listing_page(url):
         raise HTTPException(400, "That's a search or category page, not one product. "
                                  "Save the product's own page instead.")
+
+
+def save_products(db: Connection[DictRow], move_id: int, item_id: int | None,
+                  item_name: str | None, category_id: int | None, products: list[dict]) -> dict:
+    """Save real products Dolly found as choices for one list item, each with
+    its current price, and return the card that shows them.
+
+    products: dicts with title, retailer, url, price, and image_url (or None).
+    The same URL is one product, so saving it again just adds a new price.
+
+    With item_id, they become options for that item, and the user picks one
+    (see choose_product in items_routes.py). Without one (it's for something
+    not on the list yet), item_name and category_id say what the item would
+    be, and picking one adds the item (see add_item in items_routes.py).
+    """
     if item_id is not None:
         item_name = get_move_item(db, move_id, item_id)["name"]
     elif not item_name:
-        raise HTTPException(400, "Say which list item this product is for")
-    product = db.execute(
-        """
-        INSERT INTO products (retailer, title, url) VALUES (%s, %s, %s)
-        ON CONFLICT (url) DO UPDATE SET title = EXCLUDED.title, retailer = EXCLUDED.retailer
-        RETURNING product_id
-        """,
-        (retailer.strip()[:100], title.strip()[:255], url.strip()),
-    ).fetchone()
-    assert product is not None  # INSERT ... RETURNING always returns the row
-    record_price(db, product["product_id"], price)
+        raise HTTPException(400, "Say which list item these products are for")
+    options = []
+    for product in products:
+        check_product_link(product["url"])
+        row = db.execute(
+            """
+            INSERT INTO products (retailer, title, url) VALUES (%s, %s, %s)
+            ON CONFLICT (url) DO UPDATE SET title = EXCLUDED.title, retailer = EXCLUDED.retailer
+            RETURNING product_id
+            """,
+            (product["retailer"].strip()[:100], product["title"].strip()[:255], product["url"].strip()),
+        ).fetchone()
+        assert row is not None  # INSERT ... RETURNING always returns the row
+        record_price(db, row["product_id"], product["price"])
+        if item_id is not None:
+            db.execute(
+                "INSERT INTO item_product_options (item_id, product_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                (item_id, row["product_id"]),
+            )
+        options.append({
+            "product_id": row["product_id"],
+            "title": product["title"].strip(),
+            "retailer": product["retailer"].strip(),
+            "url": product["url"].strip(),
+            "price": product["price"],
+            "image_url": product.get("image_url"),
+        })
     if item_id is not None:
-        db.execute(
-            "INSERT INTO item_product_options (item_id, product_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
-            (item_id, product["product_id"]),
-        )
-        log_activity(db, move_id, None, "product_suggested", "item", item_id,
-                     {"product_id": product["product_id"], "price": price})
+        log_activity(db, move_id, None, "products_suggested", "item", item_id,
+                     {"product_ids": [o["product_id"] for o in options]})
     return {
-        "type": "product",
-        "product_id": product["product_id"],
+        "type": "products",
         "item_id": item_id,
         "item_name": item_name,
         "category_id": category_id,
-        "title": title.strip(),
-        "retailer": retailer.strip(),
-        "url": url.strip(),
-        "price": price,
+        "options": options,
     }
 
 
@@ -168,17 +214,29 @@ def list_unlisted_products(db: Connection[DictRow], move_id: int) -> list[dict]:
     """
     return db.execute(
         """
+        WITH cards AS (
+            SELECT m.content::jsonb AS card
+            FROM ai_messages m JOIN ai_conversations c ON c.conversation_id = m.conversation_id
+            WHERE c.move_id = %s AND m.role = 'tool' AND m.content IS NOT NULL
+        ), found AS (
+            -- A card with several choices ...
+            SELECT card ->> 'item_name' AS for_item, (o ->> 'product_id')::int AS product_id
+            FROM cards, jsonb_array_elements(card -> 'options') o
+            WHERE card ->> 'type' = 'products' AND card ->> 'item_id' IS NULL
+            UNION ALL
+            -- ... or an older card with one.
+            SELECT card ->> 'item_name', (card ->> 'product_id')::int
+            FROM cards
+            WHERE card ->> 'type' = 'product' AND card ->> 'item_id' IS NULL
+        )
         SELECT DISTINCT ON (p.product_id)
-               card.content::jsonb ->> 'item_name' AS for_item, p.product_id, p.title, p.retailer, p.url,
+               f.for_item, p.product_id, p.title, p.retailer, p.url,
                (SELECT price FROM product_prices pp WHERE pp.product_id = p.product_id
                 ORDER BY fetched_at DESC LIMIT 1) AS price
-        FROM ai_messages card
-        JOIN ai_conversations c ON c.conversation_id = card.conversation_id
-        JOIN products p ON p.product_id = (card.content::jsonb ->> 'product_id')::int
-        WHERE c.move_id = %s AND card.role = 'tool' AND card.tool_name = 'save_product'
-          AND card.content::jsonb ->> 'item_id' IS NULL
-          -- Once the item is added, the product is one of its options instead.
-          AND NOT EXISTS (SELECT 1 FROM item_product_options o JOIN items i ON i.item_id = o.item_id
+        FROM found f
+        JOIN products p ON p.product_id = f.product_id
+        -- Once the item is added, the product is one of its options instead.
+        WHERE NOT EXISTS (SELECT 1 FROM item_product_options o JOIN items i ON i.item_id = o.item_id
                           WHERE o.product_id = p.product_id AND i.move_id = %s)
         ORDER BY p.product_id
         """,

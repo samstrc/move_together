@@ -8,7 +8,7 @@ can't see it. Dolly's tools work with the database directly through
 DollyContext, so they only ever see the move checked here.
 
 Each tool Dolly uses is saved as a 'tool' message (tool_name, tool_input). If
-the tool made a card (a product, a list change), the card is saved as JSON in
+the tool made a card (products to choose from, a list change), the card is saved as JSON in
 that message's content, so the chat can show it again later.
 """
 
@@ -181,7 +181,7 @@ TOOL_STATUS = {
     "suggest_item": "Writing up a suggestion",
     "update_item": "Updating the list",
     "remove_item": "Updating the list",
-    "save_product": "Saving the product",
+    "show_products": "Gathering your options",
 }
 
 
@@ -198,6 +198,12 @@ def card_note(card: dict) -> str:
                 else f"for {card['item_name']}, not on the list yet")
         return (f"[Card: product_id {card['product_id']}, {card['title']}, ${card['price']} at "
                 f"{card['retailer']}, {what}]")
+    if card["type"] == "products":
+        what = (f"for item_id {card['item_id']} ({card['item_name']})" if card.get("item_id")
+                else f"for {card['item_name']}, not on the list yet")
+        options = "; ".join(f"product_id {o['product_id']}, {o['title']}, ${o['price']} at {o['retailer']}"
+                            for o in card["options"])
+        return f"[Card: options {what}: {options}]"
     if card["type"] == "suggested_item":
         return f"[Card: suggested {card['item']['name']} for the list]"
     if card["type"] == "item":

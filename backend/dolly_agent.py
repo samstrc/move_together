@@ -5,7 +5,8 @@ directly to try a prompt without the web server (its changes are undone).
 
 What Dolly can do, through tools:
   - read the group's list, budget, expenses, and saved product options
-  - search the web for real products and save them as options for an item
+  - search the web for real products and show them side by side, with
+    pictures, for the user to choose from
   - suggest items for the list (the user adds them with a button), and edit
     or remove items
 She doesn't buy anything: the group buys at the store and marks the item bought.
@@ -30,9 +31,11 @@ from dotenv import load_dotenv
 from fastapi import HTTPException
 from psycopg import Connection
 from psycopg.rows import DictRow
+from pydantic import BaseModel, Field
 
 import items_routes
 import shopping
+from product_images import look_up_pages
 from budget_routes import budget_summary
 
 load_dotenv()
@@ -56,17 +59,28 @@ What you do:
 - Look things up with your tools before answering questions about the list,
   budget, expenses, or saved products. Don't answer
   from memory: the list changes while you chat.
-- Find real products with web search, compare prices, and help choose. When you
-  recommend a product, save it with save_product so the group sees it as a card
-  with a link to the store. Only save prices and links you actually found.
-- The link must be the product's own page. If save_product says it's a
-  search or category page, search again for that exact product's page
-  (e.g. "<product name> <store>") and try again. Never leave it unsaved
-  just because the first link didn't work.
-- Check get_list before saving a product. If an item on the list fits (even
-  one marked bought: a "Couch" item covers "find us a couch"), save the
-  product to that item_id. If nothing fits, save it without an item_id and
-  give item_name: the card has an "Add to list" button.
+- Find real products with web search and let the group choose. Find 3
+  options (different stores or price points when you can) and show them all
+  in one show_products call: the user sees them side by side with pictures
+  and picks one. Picking one on the card makes it the item's choice (and
+  adds the item if it isn't on the list), so there's nothing for you to do
+  after. Don't pick for them, but you can say which you'd go for and why.
+  Only use prices and links you actually found.
+- Only show products that are for sale now. Search results are often old
+  (reviews, "best of" lists, last year's models), so search for current
+  listings (add this year or "in stock" to the search) and take the product's
+  page at a store that sells it, not a review site's link.
+- Each link must be that product's own page. show_products opens every page
+  and leaves out ones that are gone, discontinued, sold out, or redirect to a
+  category page. When it does, search again for a product that's for sale
+  now and call show_products with just the replacements: they join the same
+  card. Never give up just because a first link didn't work, and never tell
+  the user about a product that was left out as if they could buy it.
+- Use the prices show_products reports from the store pages.
+- Check get_list before showing products. If an item on the list fits (even
+  one marked bought: a "Couch" item covers "find us a couch"), pass its
+  item_id. If nothing fits, leave item_id out and give item_name: choosing
+  a product then adds the item.
 - You can't add items to the list yourself: the group decides. suggest_item
   shows the user a card with an "Add to list" button. Never suggest an item
   that's already on the list. Don't say you added something; say you
@@ -362,6 +376,12 @@ def suggest_item(
     responsible_id = find_member(db, move_id, responsible) if responsible else None
     product = None
     if product_id is not None:
+        # Cards from this reply aren't saved yet, so check them too.
+        shown_now = any(
+            product_id in {o["product_id"] for o in c.get("options", [])} or c.get("product_id") == product_id
+            for c in ctx.context.cards.values())
+        if not shown_now and not shopping.product_in_move(db, move_id, product_id):
+            raise HTTPException(400, f"product_id {product_id} isn't one of this group's products")
         product = db.execute(
             """
             SELECT p.product_id, (SELECT price FROM product_prices pp WHERE pp.product_id = p.product_id
@@ -462,44 +482,107 @@ def remove_item(ctx: RunContextWrapper[DollyContext], item_id: int) -> str:
     return f"Removed {item['name']}."
 
 
+class ProductFound(BaseModel):
+    title: str = Field(description="The product's name as the store lists it.")
+    retailer: str = Field(description='The store, e.g. "IKEA" or "Target".')
+    url: str = Field(description="The product's own page (not a search or category page).")
+    price: float = Field(description="The current price in US dollars that you found.")
+
+
 @function_tool
-def save_product(
+def show_products(
     ctx: RunContextWrapper[DollyContext],
-    title: str,
-    retailer: str,
-    url: str,
-    price: float,
+    products: list[ProductFound],
     item_id: int | None = None,
     item_name: str | None = None,
     category: str | None = None,
 ) -> str:
-    """Save a real product you found. The user sees it as a card with a link
-    to the store. Give item_id if it's for an item already on the list;
-    otherwise give item_name (and category), and the card gets an "Add to
-    list" button.
+    """Show the user the real products you found for one list item, side by
+    side with pictures, so they can choose one. Show about 3. Products whose
+    link isn't a working product page are left out, and you're told why.
 
     Args:
-        title: The product's name as the store lists it.
-        retailer: The store, e.g. "IKEA" or "Target".
-        url: The product's own page (not a search results page), as you found it.
-        price: The current price in US dollars that you found.
-        item_id: The list item it's for (from get_list), if there is one.
-        item_name: What list item it would be, e.g. "Bath mat", when it isn't
-            on the list yet.
+        products: The products, best first.
+        item_id: The list item they're for (from get_list), if there is one.
+        item_name: What list item they'd be, e.g. "Bath mat", when it isn't on
+            the list yet. Choosing one adds the item.
         category: The category for that new item, e.g. "Bathroom".
     """
     db, move_id = ctx.context.db, ctx.context.move_id
+    if not products:
+        return "Give at least one product."
     if item_id is None and item_name:
         existing = find_item(db, move_id, item_name)
         if existing:
             item_id = existing["item_id"]
+
+    left_out, checked = [], []
+    for product in products[:4]:
+        try:
+            shopping.check_product_link(product.url)
+            checked.append(product)
+        except HTTPException as error:
+            left_out.append(f"{product.title}: {error.detail}")
+    # Reads each page (at the same time): whether you can still buy it, its
+    # picture, and its current price.
+    pages = look_up_pages([product.url for product in checked])
+    found, unchecked = [], []
+    for product, page in zip(checked, pages):
+        if page.missing:
+            left_out.append(f"{product.title}: {page.reason}.")
+            continue
+        if not page.checked:
+            unchecked.append((product, page))
+            continue
+        # The page's own price beats the one from search results, which can be old.
+        price = page.price if page.price is not None else product.price
+        found.append({"title": product.title, "retailer": product.retailer, "url": product.url,
+                      "price": dollars(price), "image_url": page.image})
+    # A store that blocks automatic checks might be showing an old product, so
+    # those are only used when nothing else could be checked (in this call, or
+    # already on this item's card from earlier in the reply).
+    shown_already = any(
+        c["type"] == "products" and c["options"] and (
+            (item_id is not None and c["item_id"] == item_id)
+            or (item_name and c["item_name"].lower() == item_name.lower()))
+        for c in ctx.context.cards.values())
+    if found or shown_already:
+        left_out += [f"{product.title}: couldn't confirm it's still for sale, because {product.retailer} "
+                     "blocks automatic checks. Prefer a different store." for product, _ in unchecked]
+        unchecked = []
+    else:
+        found = [{"title": product.title, "retailer": product.retailer, "url": product.url,
+                  "price": dollars(page.price if page.price is not None else product.price),
+                  "image_url": page.image} for product, page in unchecked]
+    if not found:
+        return "None of these could be shown. " + " ".join(left_out) + " Search again for real product pages."
+
     with db.transaction():
-        card = shopping.save_product(db, move_id, item_id, title, retailer, url, dollars(price),
-                                     item_name, find_category(db, category) if category else None)
-    show(ctx, card)
-    where = (f"as an option for {card['item_name']}" if item_id is not None
-             else f"with an Add to list button for {card['item_name']}")
-    return f"Saved product_id {card['product_id']} {where}."
+        card = shopping.save_products(db, move_id, item_id, item_name,
+                                      find_category(db, category) if category else None, found)
+    # Replacements for left-out products join the card already shown for this
+    # item in this reply, instead of making a second card.
+    for earlier in ctx.context.cards.values():
+        if earlier["type"] == "products" and earlier["item_id"] == card["item_id"] \
+                and earlier["item_name"].lower() == card["item_name"].lower():
+            have = {o["product_id"] for o in earlier["options"]}
+            earlier["options"] += [o for o in card["options"] if o["product_id"] not in have]
+            card = earlier
+            break
+    else:
+        show(ctx, card)
+    shown = ", ".join(f"product_id {o['product_id']} ({o['title']})" for o in card["options"])
+    reply = f"Showing {len(found)} for {card['item_name']}: {shown}. The user picks one on the card."
+    if any(page.price is not None for page in pages):
+        reply += " Prices are the ones on the store pages now; use those in your reply."
+    if unchecked:
+        reply += (" Couldn't check that these are still for sale (the store blocks automatic checks), so "
+                  "tell the user to double-check on the store's page: "
+                  + "; ".join(product.title for product, _ in unchecked) + ".")
+    if left_out:
+        reply += (" Left out: " + " ".join(left_out)
+                  + " Search again for products that are for sale now and show the replacements.")
+    return reply
 
 
 agent = Agent[DollyContext](
@@ -511,7 +594,7 @@ agent = Agent[DollyContext](
         WebSearchTool(search_context_size="low"),
         get_list, get_budget, get_expenses, get_product_options,
         suggest_item, update_item, remove_item,
-        save_product,
+        show_products,
     ],
     # Start from the SDK's settings for the default model (no extra reasoning,
     # short answers: fast) and run one tool at a time, since the tools share
