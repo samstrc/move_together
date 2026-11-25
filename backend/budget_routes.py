@@ -402,13 +402,16 @@ def record_settlement(
         )
     if from_user == body.to_user:
         raise HTTPException(status_code=400, detail="Pick two different people")
-    # Both people must be in the group, or have left with money still involved.
+    # Both people must be in the group, or have left with money still involved
+    # (expenses, shares, or earlier payments: the same people the balances show).
     involved = db.execute(
         """
         SELECT user_id FROM move_members WHERE move_id = %(m)s
         UNION SELECT paid_by FROM expenses WHERE move_id = %(m)s
         UNION SELECT s.user_id FROM expense_splits s
               JOIN expenses e ON e.expense_id = s.expense_id WHERE e.move_id = %(m)s
+        UNION SELECT from_user FROM settlements WHERE move_id = %(m)s
+        UNION SELECT to_user FROM settlements WHERE move_id = %(m)s
         """,
         {"m": move_id},
     ).fetchall()
