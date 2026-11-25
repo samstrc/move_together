@@ -1,0 +1,7 @@
+{
+    "python-envs.defaultEnvManager": "ms-python.python:conda",
+    "python-envs.defaultPackageManager": "ms-python.python:conda",
+    // The backend runs from inside backend/ (see backend/Dockerfile), so its
+    // imports look like `from db import get_db`. This tells Pylance to look there.
+    "python.analysis.extraPaths": ["backend"]
+}

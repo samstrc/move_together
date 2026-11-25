@@ -29,8 +29,13 @@ def get_db():
     The transaction is committed when the endpoint finishes, or rolled back
     if it raises an error. Use it like:
 
-        def my_endpoint(db = Depends(get_db)):
+        def my_endpoint(db = Depends(get_db, scope="function")):
             db.execute("SELECT ...")
+
+    scope="function" commits before the response is sent. Without it, FastAPI
+    sends the response first and commits after, so a request made right after
+    (e.g. sending the first message to a chat that was just created) could
+    miss what the previous one saved.
     """
     with pool.connection() as conn:
         yield conn

@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 from auth_routes import get_current_user, require_member
 from db import get_db
+from shopping import require_product_in_move
 
 router = APIRouter(tags=["items"])
 
@@ -33,6 +34,7 @@ ITEM_SELECT = """
            i.added_by AS added_by_id,
            au.name AS added_by,
            i.notes,
+           i.selected_product_id,
            i.created_at
     FROM items i
     LEFT JOIN categories c ON c.category_id = i.category_id
@@ -50,6 +52,8 @@ class ItemIn(BaseModel):
     est_cost: Decimal | None = Field(default=None, ge=0, max_digits=10, decimal_places=2)
     responsible_user_id: int | None = None
     notes: str | None = None
+    # A product Dolly found: saved as the new item's option and chosen.
+    product_id: int | None = None
 
 
 class ItemUpdate(BaseModel):
@@ -97,7 +101,7 @@ def get_item(move_id: int, item_id: int, db: Connection[DictRow]) -> dict:
 # ---------- Endpoints ----------
 
 @router.get("/categories")
-def list_categories(db: Connection[DictRow] = Depends(get_db)):
+def list_categories(db: Connection[DictRow] = Depends(get_db, scope="function")):
     """The fixed category list (Kitchen, Furniture, ...), for dropdowns."""
     return db.execute("SELECT category_id, name FROM categories ORDER BY name").fetchall()
 
@@ -110,7 +114,7 @@ def list_items(
     category_id: int | None = None,
     responsible_user_id: int | None = None,
     user: dict = Depends(get_current_user),
-    db: Connection[DictRow] = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db, scope="function"),
 ):
     """The shared list, newest first. All filters are optional:
 
@@ -149,22 +153,32 @@ def add_item(
     move_id: int,
     body: ItemIn,
     user: dict = Depends(get_current_user),
-    db: Connection[DictRow] = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db, scope="function"),
 ):
-    """Add an item to the list. added_by is set to the logged-in user."""
+    """Add an item to the list. added_by is set to the logged-in user.
+    product_id (optional) is a product Dolly found: it's saved as the new
+    item's option and chosen, like choose_product.
+    """
     require_member(move_id, user, db)
     check_references(move_id, body.model_dump(), db)
+    if body.product_id is not None:
+        require_product_in_move(db, move_id, body.product_id)
     row = db.execute(
         """
         INSERT INTO items (move_id, name, category_id, room_id, quantity, est_cost,
-                           responsible_user_id, added_by, notes)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                           responsible_user_id, added_by, notes, selected_product_id)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING item_id
         """,
         (move_id, body.name.strip(), body.category_id, body.room_id, body.quantity,
-         body.est_cost, body.responsible_user_id, user["user_id"], body.notes),
+         body.est_cost, body.responsible_user_id, user["user_id"], body.notes, body.product_id),
     ).fetchone()
     assert row is not None  # INSERT ... RETURNING always returns the row
+    if body.product_id is not None:
+        db.execute(
+            "INSERT INTO item_product_options (item_id, product_id) VALUES (%s, %s)",
+            (row["item_id"], body.product_id),
+        )
     return get_item(move_id, row["item_id"], db)
 
 
@@ -174,7 +188,7 @@ def update_item(
     item_id: int,
     body: ItemUpdate,
     user: dict = Depends(get_current_user),
-    db: Connection[DictRow] = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db, scope="function"),
 ):
     """Change any of an item's fields, e.g. {"status": "bought"}.
 
@@ -203,12 +217,48 @@ def update_item(
     return get_item(move_id, item_id, db)
 
 
+class ChooseIn(BaseModel):
+    product_id: int
+
+
+@router.post("/moves/{move_id}/items/{item_id}/choose")
+def choose_product(
+    move_id: int,
+    item_id: int,
+    body: ChooseIn,
+    user: dict = Depends(get_current_user),
+    db: Connection[DictRow] = Depends(get_db, scope="function"),
+):
+    """Pick one of the products Dolly found as the one to buy for this item.
+    It's saved as an option (if it wasn't already) and the item's estimated
+    cost becomes its latest price.
+    """
+    require_member(move_id, user, db)
+    get_item(move_id, item_id, db)  # 404 if it isn't in this move
+    require_product_in_move(db, move_id, body.product_id)
+    db.execute(
+        "INSERT INTO item_product_options (item_id, product_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+        (item_id, body.product_id),
+    )
+    db.execute(
+        """
+        UPDATE items
+        SET selected_product_id = %(product_id)s,
+            est_cost = COALESCE((SELECT price FROM product_prices WHERE product_id = %(product_id)s
+                                 ORDER BY fetched_at DESC LIMIT 1), est_cost)
+        WHERE item_id = %(item_id)s
+        """,
+        {"product_id": body.product_id, "item_id": item_id},
+    )
+    return get_item(move_id, item_id, db)
+
+
 @router.delete("/moves/{move_id}/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_item(
     move_id: int,
     item_id: int,
     user: dict = Depends(get_current_user),
-    db: Connection[DictRow] = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db, scope="function"),
 ):
     """Remove an item. Expenses that pointed to it are kept (item_id becomes NULL)."""
     require_member(move_id, user, db)

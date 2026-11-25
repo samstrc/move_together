@@ -1,77 +1,185 @@
-/* Global styles and color variables used across the whole app. */
+/* Design tokens and base styles for the whole app.
+   The full design system (and why each value is what it is) is in DESIGN.md
+   at the repo root. Every color lives here, so pages never hard-code hex. */
 :root {
-  /* Light theme: baby blue accents with black text */
-  --text: #3f3f46;
-  --text-h: #111111;
-  --bg: #ffffff;
-  --card-bg: #f3f9fd;
-  --hero-bg: #e3f2fb;
-  --border: #d4e6f2;
-  --accent: #111111;
-  --accent-hover: #333333;
-  --on-accent: #ffffff;
-  --blue: #89cff0;
-  --blue-strong: #2b8bc6;
+  /* Brand blues. #89cff0 and #2b8bc6 are the brand colors, pinned.
+     #89cff0 is for fills only (too light for text); #2b8bc6 for icons,
+     outlines and chart fills; --blue-700 for small blue text and buttons. */
+  --blue-50: #eaf5fc;
+  --blue-100: #d6edf9;
+  --blue-300: #89cff0;
+  --blue-500: #2b8bc6;
+  --blue-700: #1f648e;
+  --blue-800: #1c587d;
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+  /* Warm "paper" neutrals */
+  --paper: #f7f5f1;
+  --surface: #ffffff;
+  --sunk: #f3f1ec;
+  --line: #e6e2da;        /* decorative dividers only */
+  --line-strong: #7a746a; /* borders of inputs, buttons, chart outlines (4.63:1) */
+  --ink: #22201c;
+  --text-2: #5d5850;
+  --on-primary: #ffffff;
 
-  font: 18px/150% var(--sans);
+  /* Cardboard box label */
+  --kraft: #f5ecdb;
+  --kraft-line: #e3d2b0;
+  --kraft-ink: #6b4f1d;
+
+  /* Status */
+  --success-bg: #e6f4ec;
+  --success-text: #17683c;
+  --warning-bg: #fdf4d9;
+  --warning-text: #7a5600;
+  --warning-mark: #e0a100; /* status dot only */
+  --error-bg: #fdecec;
+  --error-text: #b42318;
+  --error-mark: #b42318;
+  --error-hover: #8f1c13;
+
+  /* Glass (only on chrome: sidebar, tab bar, composer, dropdowns) */
+  --glass: rgb(255 255 255 / 0.72);
+  --glass-strong: rgb(255 255 255 / 0.86);
+  --glass-edge: rgb(255 255 255 / 0.9);
+  --glass-blur: blur(22px) saturate(1.5);
+  --glass-shadow: 0 1px 0 rgb(255 255 255 / 0.9) inset, 0 10px 30px rgb(43 60 80 / 0.10), 0 1px 3px rgb(43 60 80 / 0.06);
+  --backdrop-a: rgb(137 207 240 / 0.62);
+  --backdrop-b: rgb(43 139 198 / 0.22);
+  --tape: rgb(137 207 240 / 0.88);
+  --tape-stripe: rgb(255 255 255 / 0.35);
+  --shadow: 0 1px 2px rgb(40 32 20 / 0.04), 0 2px 8px rgb(40 32 20 / 0.05);
+  --shadow-lift: 0 10px 24px rgb(40 32 20 / 0.10);
+  --scrim: rgb(34 32 28 / 0.32);
+
+  /* Shape, space, type */
+  --radius-xs: 4px;
+  --radius-sm: 10px;
+  --radius: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 26px;
+  --radius-pill: 999px;
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 24px;
+  --s6: 32px;
+  --s7: 48px;
+  --sans: 'Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono: ui-monospace, 'SF Mono', Consolas, monospace;
+
+  /* Motion */
+  --ease-out: cubic-bezier(.22, 1, .36, 1);       /* settles softly: entrances, dropdowns */
+  --ease-spring: cubic-bezier(.34, 1.56, .64, 1); /* tiny overshoot: press release, focus */
+  --dur-1: 120ms;
+  --dur-2: 220ms;
+  --dur-3: 420ms;
+  --dur-4: 800ms;
+  --focus-glow: 0 0 0 4px rgb(43 139 198 / 0.20), 0 6px 18px rgb(31 100 142 / 0.14);
+
+  /* Older names, kept so nothing that still uses them breaks */
+  --text: var(--text-2);
+  --text-h: var(--ink);
+  --bg: var(--surface);
+  --card-bg: var(--surface);
+  --hero-bg: var(--blue-50);
+  --border: var(--line);
+  --accent: var(--blue-700);
+  --accent-hover: var(--blue-800);
+  --on-accent: var(--on-primary);
+  --blue: var(--blue-300);
+  --blue-strong: var(--blue-500);
+
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  font: 16px/1.55 var(--sans);
   color-scheme: light;
-  color: var(--text);
-  background: var(--bg);
+  color: var(--ink);
+  background: var(--paper);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-body {
-  margin: 0;
-  background: var(--bg);
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
-/* The app fills the whole window. Pages that need a readable line length
-   limit their own content (see .page-width in App.css). */
+body {
+  margin: 0;
+  background: var(--paper);
+  /* Keeps the backdrop below behind the page but above the body color */
+  isolation: isolate;
+}
+
+/* Calm backdrop the glass sits on: soft washes of the brand blues */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(34vw 60vh at 0% 30%, var(--backdrop-a), transparent 72%),
+    radial-gradient(28vw 50vh at 8% 95%, var(--backdrop-b), transparent 70%),
+    radial-gradient(40vw 40vh at 100% 0%, var(--backdrop-b), transparent 70%),
+    radial-gradient(30vw 40vh at 75% 105%, var(--backdrop-a), transparent 70%);
+}
+
+/* The app fills the whole window */
 #root {
   width: 100%;
-  min-height: 100svh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
 }
 
 h1,
-h2 {
-  font-weight: 600;
-  color: var(--text-h);
-}
-
-h1 {
-  font-size: 56px;
-  line-height: 110%;
-  letter-spacing: -1.5px;
-  margin: 0 0 20px;
-}
-
-h2 {
-  font-size: 22px;
-  margin: 0 0 8px;
-}
-
+h2,
+h3,
 p {
   margin: 0;
 }
 
-@media (max-width: 768px) {
-  :root {
-    font-size: 16px;
-  }
-
-  h1 {
-    font-size: 36px;
-  }
+h1 {
+  font-size: 32px;
+  line-height: 1.15;
+  font-weight: 750;
+  letter-spacing: -0.025em;
+  color: var(--ink);
 }
 
-@media (max-width: 480px) {
+h2 {
+  font-size: 17px;
+  line-height: 1.35;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+a {
+  color: var(--blue-700);
+}
+
+a,
+button {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* Money lines up in columns */
+.money,
+.stat-value,
+td,
+.payment-amount,
+.balance {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 599.98px) {
   h1 {
-    font-size: 30px;
-    letter-spacing: -0.5px;
+    font-size: 26px;
   }
 }

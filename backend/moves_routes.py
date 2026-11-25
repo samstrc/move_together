@@ -74,7 +74,7 @@ def require_owner(move_id: int, user: dict, db: Connection[DictRow]) -> None:
 # ---------- Endpoints ----------
 
 @router.get("")
-def list_my_moves(user: dict = Depends(get_current_user), db: Connection[DictRow] = Depends(get_db)):
+def list_my_moves(user: dict = Depends(get_current_user), db: Connection[DictRow] = Depends(get_db, scope="function")):
     """Every move the logged-in user belongs to, soonest move date first."""
     return db.execute(
         """
@@ -93,7 +93,7 @@ def list_my_moves(user: dict = Depends(get_current_user), db: Connection[DictRow
 def create_move(
     body: MoveIn,
     user: dict = Depends(get_current_user),
-    db: Connection[DictRow] = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db, scope="function"),
 ):
     """Create a move. The creator becomes its owner, and it gets an invite code."""
     move = db.execute(
@@ -120,7 +120,7 @@ def create_move(
 def join_move(
     body: JoinIn,
     user: dict = Depends(get_current_user),
-    db: Connection[DictRow] = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db, scope="function"),
 ):
     """Join a move with its invite code (e.g. MOVE-4821)."""
     invite = db.execute(
@@ -153,7 +153,7 @@ def join_move(
 def get_move(
     move_id: int,
     user: dict = Depends(get_current_user),
-    db: Connection[DictRow] = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db, scope="function"),
 ):
     """Move details, its members, and the code for inviting people."""
     role = require_member(move_id, user, db)
@@ -193,7 +193,7 @@ def update_move(
     move_id: int,
     body: MoveUpdate,
     user: dict = Depends(get_current_user),
-    db: Connection[DictRow] = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db, scope="function"),
 ):
     """Edit the move's name, destination, or date. Any member can do this.
 
@@ -222,7 +222,7 @@ def update_move(
 def delete_move(
     move_id: int,
     user: dict = Depends(get_current_user),
-    db: Connection[DictRow] = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db, scope="function"),
 ):
     """Delete the whole group and everything in it. Owners only."""
     require_owner(move_id, user, db)
@@ -234,7 +234,7 @@ def delete_move(
 def new_code(
     move_id: int,
     user: dict = Depends(get_current_user),
-    db: Connection[DictRow] = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db, scope="function"),
 ):
     """Replace the invite code (the old one stops working). Owners only."""
     require_owner(move_id, user, db)
@@ -259,7 +259,7 @@ def update_member(
     member_id: int,
     body: MemberUpdate,
     user: dict = Depends(get_current_user),
-    db: Connection[DictRow] = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db, scope="function"),
 ):
     """Change a member's move-in date or share (split_weight).
 
@@ -303,7 +303,7 @@ def transfer_ownership(
     move_id: int,
     member_id: int,
     user: dict = Depends(get_current_user),
-    db: Connection[DictRow] = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db, scope="function"),
 ):
     """Transfer ownership to a current member as one serialized transaction."""
     require_owner(move_id, user, db)
@@ -357,7 +357,7 @@ def remove_member(
     move_id: int,
     member_id: int,
     user: dict = Depends(get_current_user),
-    db: Connection[DictRow] = Depends(get_db),
+    db: Connection[DictRow] = Depends(get_db, scope="function"),
 ):
     """Leave the group (your own user_id) or remove someone (the owner only).
 

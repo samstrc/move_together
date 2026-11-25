@@ -15,6 +15,11 @@ function today() {
 // Group budget: budgets per category, what's been spent, and who owes what.
 function Budget() {
   const { user, move } = useOutletContext()
+  // A different group starts with fresh forms (its own members, payer, ...).
+  return <BudgetContent key={move?.move_id ?? 'no-group'} user={user} move={move} />
+}
+
+function BudgetContent({ user, move }) {
   const moveId = move?.move_id
   const summary = useApi(moveId ? `/moves/${moveId}/budget` : null)
   const expenses = useApi(moveId ? `/moves/${moveId}/expenses` : null)
@@ -178,7 +183,7 @@ function Budget() {
             </label>
             <label>
               <input type="radio" name="split" checked={splitMode === 'some'} onChange={() => setSplitMode('some')} />
-              {' '}Evenly between only some people
+              {' '}Between only some people, by their shares
             </label>
             <label>
               <input type="radio" name="split" checked={splitMode === 'custom'} onChange={() => setSplitMode('custom')} />

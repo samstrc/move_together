@@ -56,7 +56,7 @@ def foreign_key_error(request: Request, exc: ForeignKeyViolation):
 
 
 @app.get("/")
-def health_check(db: Connection[DictRow] = Depends(get_db)):
+def health_check(db: Connection[DictRow] = Depends(get_db, scope="function")):
     """Quick way to check the server and database are running."""
     db.execute("SELECT 1")
     return {"status": "ok", "database": "ok"}
