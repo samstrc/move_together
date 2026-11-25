@@ -35,7 +35,7 @@ services:
         sync: false
       # The website's address, so the browser may call the API (CORS).
       - key: FRONTEND_ORIGINS
-        value: https://move-together.onrender.com
+        value: https://move-together-9hq4.onrender.com
 
   # React frontend, built once and served as static files.
   - type: web
