@@ -7,6 +7,7 @@ Then open http://localhost:8000/docs to see and test every endpoint.
 The database must be running first (`docker compose up -d` from the repo root).
 """
 
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, Request
@@ -34,10 +35,13 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Move Together API", lifespan=lifespan)
 
-# Let the React app (running on localhost:5173) call this API.
+# Let the React app call this API: localhost:5173 in development, plus any
+# deployed frontends listed in FRONTEND_ORIGINS (comma-separated), e.g.
+# FRONTEND_ORIGINS=https://move-together.onrender.com
+deployed_origins = [o.strip().rstrip("/") for o in os.environ.get("FRONTEND_ORIGINS", "").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:5174"],
+    allow_origins=["http://localhost:5173", "http://localhost:5174", *deployed_origins],
     allow_methods=["*"],
     allow_headers=["*"],
 )

@@ -1,5 +1,7 @@
 // Helper file to reuse on API requests
-const API_URL = 'http://localhost:8000'
+// The backend's address. Locally it's localhost:8000; a deployed build sets
+// VITE_API_URL (e.g. on Render) when it's built.
+const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '')
 
 export function getToken() {
   return localStorage.getItem('token')
