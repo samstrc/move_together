@@ -3,6 +3,7 @@ import { useOutletContext } from 'react-router-dom'
 import PageHeader from '../components/PageHeader.jsx'
 import NoGroup from '../components/NoGroup.jsx'
 import { DollyCard } from '../components/DollyCards.jsx'
+import { Mark } from '../components/Icons.jsx'
 import { api, streamApi } from '../api.js'
 import { useApi } from '../hooks/useApi.js'
 
@@ -37,6 +38,23 @@ function Dolly() {
   return <DollyChat key={move.move_id} moveId={move.move_id} />
 }
 
+// Dolly's little avatar: the Move Together dolly.
+function Avatar() {
+  return (
+    <span className="dolly-avatar" aria-hidden="true">
+      <Mark size={24} />
+    </span>
+  )
+}
+
+// Dolly's reply, one word at a time: each word fades in when it arrives.
+// Words are keyed by position, so only new ones animate as the reply grows.
+function StreamedText({ text }) {
+  return text.split(/(\s+)/).map((part, index) =>
+    /^\s*$/.test(part) ? part : <span key={index} className="w">{part}</span>,
+  )
+}
+
 function DollyChat({ moveId }) {
   const basePath = `/moves/${moveId}/assistant/conversations`
 
@@ -50,7 +68,7 @@ function DollyChat({ moveId }) {
   const [sending, setSending] = useState(false)
   const [status, setStatus] = useState('') // what Dolly is doing, e.g. "Searching the web"
   const [error, setError] = useState('')
-  const bottomRef = useRef(null)
+  const listRef = useRef(null)
 
   // What's on the list, so suggestion cards know if they've been added.
   const items = useApi(`/moves/${moveId}/items`)
@@ -98,10 +116,22 @@ function DollyChat({ moveId }) {
     }
   }, [basePath, moveId])
 
-  // Keep the newest message in view.
+  // Keep the newest message in view (the messages scroll inside the chat),
+  // unless you've scrolled up to read something while Dolly is writing.
+  const pinnedRef = useRef(true)
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-  }, [messages, sending])
+    const list = listRef.current
+    if (!list || !pinnedRef.current) return
+    // Jump (not glide) while her reply streams in, so the scroll keeps up
+    // and isn't mistaken for you scrolling away.
+    const smooth = !sending && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    list.scrollTo({ top: list.scrollHeight, behavior: smooth ? 'smooth' : 'auto' })
+  }, [messages, sending, status])
+
+  function handleScroll() {
+    const list = listRef.current
+    pinnedRef.current = list.scrollHeight - list.scrollTop - list.clientHeight < 160
+  }
 
   // Replace the last message (Dolly's reply while it streams in).
   function setLastMessage(message) {
@@ -113,8 +143,9 @@ function DollyChat({ moveId }) {
     if (!text || sending) return
     setError('')
     setInput('')
+    pinnedRef.current = true // sending a message jumps back to the newest
     // Dolly's reply starts empty and fills in as she writes it.
-    setMessages((current) => [...current, { role: 'user', text }, { role: 'assistant', text: '' }])
+    setMessages((current) => [...current, { role: 'user', text, live: true }, { role: 'assistant', text: '', live: true }])
     setSending(true)
     setStatus('')
     try {
@@ -137,15 +168,15 @@ function DollyChat({ moveId }) {
           } else if (event.type === 'delta') {
             reply += event.text
             setStatus('')
-            setLastMessage({ role: 'assistant', text: reply })
+            setLastMessage({ role: 'assistant', text: reply, live: true })
           } else if (event.type === 'done') {
             // The saved reply (cleaned up on the backend) replaces the
             // streamed one, and the cards go under it.
             finished = true
             setMessages((current) => [
               ...current.slice(0, -1),
-              { role: 'assistant', text: event.reply },
-              ...event.cards.map((card) => ({ role: 'card', card })),
+              { role: 'assistant', text: event.reply, live: true },
+              ...event.cards.map((card) => ({ role: 'card', card, live: true })),
             ])
           } else if (event.type === 'error') {
             failure = event.message
@@ -172,13 +203,51 @@ function DollyChat({ moveId }) {
     onList: (name) => (items.data ?? []).some(
       (item) => item.name.trim().toLowerCase() === name.trim().toLowerCase(),
     ),
+    // The list item a products card is for: by id, or by name for one that
+    // wasn't on the list when Dolly found the products.
+    itemFor: (card) => (items.data ?? []).find((item) =>
+      card.item_id ? item.item_id === card.item_id
+        : item.name.trim().toLowerCase() === card.item_name.trim().toLowerCase(),
+    ),
+    // Picking a product: it becomes the item's choice, or, if the item isn't
+    // on the list yet, adding it with this product is the user's go-ahead.
+    // Both return true when it worked, so the card can say it's saved.
+    chooseProduct: async (card, option) => {
+      setError('')
+      try {
+        const item = actions.itemFor(card)
+        if (item) {
+          await api(`/moves/${moveId}/items/${item.item_id}/choose`, {
+            method: 'POST',
+            body: { product_id: option.product_id },
+          })
+        } else {
+          await api(`/moves/${moveId}/items`, {
+            method: 'POST',
+            body: {
+              name: card.item_name,
+              category_id: card.category_id ?? null,
+              est_cost: option.price,
+              product_id: option.product_id,
+            },
+          })
+        }
+        reloadItems()
+        return true
+      } catch (err) {
+        setError(`Couldn't save your pick: ${err.message}`)
+        return false
+      }
+    },
     addItem: async (body) => {
       setError('')
       try {
         await api(`/moves/${moveId}/items`, { method: 'POST', body })
         reloadItems()
+        return true
       } catch (err) {
         setError(`Couldn't add it: ${err.message}`)
+        return false
       }
     },
   }
@@ -195,6 +264,10 @@ function DollyChat({ moveId }) {
     setError('')
   }
 
+  const last = messages.at(-1)
+  // Dolly is working but hasn't written anything yet (or is using a tool).
+  const thinking = sending && (status || !last?.text)
+
   return (
     <>
       <PageHeader title="Ask Dolly" subtitle="Ask for recommendations, shop, or help planning your move.">
@@ -208,49 +281,68 @@ function DollyChat({ moveId }) {
         </button>
       </PageHeader>
 
-      <section className="card chat">
-        <div className="chat-messages">
-          <div className="chat-bubble assistant">{greeting}</div>
-          {messages.map((message, index) =>
-            message.role === 'card' ? (
-              <DollyCard key={index} card={message.card} actions={actions} />
-            ) : (
-              // Dolly's reply is empty until her first words arrive.
-              message.text && (
-                <div key={index} className={`chat-bubble ${message.role}`}>
-                  {message.text}
+      <section className="card chat" aria-label="Chat with Dolly">
+        <div className="chat-messages" ref={listRef} onScroll={handleScroll} role="log" aria-label="Messages" aria-busy={sending} tabIndex={0}>
+          <div className="msg">
+            <Avatar />
+            <div className="chat-bubble assistant">{greeting}</div>
+          </div>
+          {messages.map((message, index) => {
+            if (message.role === 'card') {
+              return <DollyCard key={index} card={message.card} actions={actions} />
+            }
+            // Dolly's reply is empty until her first words arrive.
+            if (!message.text) return null
+            const isUser = message.role === 'user'
+            const streaming = sending && !isUser && index === messages.length - 1
+            return (
+              <div key={index} className={`msg${isUser ? ' user' : ''}${streaming ? ' streaming' : ''}`}>
+                {!isUser && <Avatar />}
+                <div className={`chat-bubble ${message.role}`}>
+                  <span className="visually-hidden">{isUser ? 'You: ' : 'Dolly: '}</span>
+                  {message.live && !isUser ? <StreamedText text={message.text} /> : message.text}
                 </div>
-              )
-            ),
+              </div>
+            )
+          })}
+          {thinking && (
+            <div className="msg">
+              <Avatar />
+              <div className="chat-bubble assistant typing">
+                <span className="typing-dots" aria-hidden="true"><i /><i /><i /></span>
+                <span className="typing-status">{status || 'Dolly is thinking'}</span>
+              </div>
+            </div>
           )}
-          {sending && (status || !messages.at(-1)?.text) && (
-            <div className="chat-bubble assistant muted">{status || 'Dolly is thinking'}...</div>
+
+          {!loading && messages.length === 0 && (
+            <div className="chat-suggestions">
+              {suggestions.map((s) => (
+                <button key={s} type="button" className="chip" onClick={() => send(s)}>
+                  {s}
+                </button>
+              ))}
+            </div>
           )}
-          <div ref={bottomRef} />
         </div>
 
-        {error && <p className="form-error">{error}</p>}
+        {error && <p className="form-error chat-error">{error}</p>}
 
-        {!loading && messages.length === 0 && (
-          <div className="chat-suggestions">
-            {suggestions.map((s) => (
-              <button key={s} type="button" className="btn btn-ghost btn-small" onClick={() => send(s)}>
-                {s}
-              </button>
-            ))}
-          </div>
-        )}
-
-        <form className="chat-input" onSubmit={handleSubmit}>
+        <form className="composer glass glass-strong" onSubmit={handleSubmit}>
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Ask Dolly..."
-            aria-label="Message"
+            aria-label="Message Dolly"
             maxLength={2000}
             disabled={loading}
+            enterKeyHint="send"
           />
-          <button type="submit" className="btn btn-primary" disabled={loading || sending || !input.trim()}>
+          <button
+            type="submit"
+            className={input.trim() && !sending ? 'btn btn-primary ready' : 'btn btn-primary'}
+            disabled={loading || sending || !input.trim()}
+          >
             Send
           </button>
         </form>
