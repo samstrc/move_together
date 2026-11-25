@@ -1,6 +1,5 @@
 /* Design tokens and base styles for the whole app.
-   The full design system (and why each value is what it is) is in DESIGN.md
-   at the repo root. Every color lives here, so pages never hard-code hex. */
+   Every color lives here, so pages never hard-code hex. */
 :root {
   /* Brand blues. #89cff0 and #2b8bc6 are the brand colors, pinned.
      #89cff0 is for fills only (too light for text); #2b8bc6 for icons,
