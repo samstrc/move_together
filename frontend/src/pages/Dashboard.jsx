@@ -41,14 +41,9 @@ function DashboardContent({ user, move }) {
   const totalSpent = Number(totals?.spent ?? 0)
   const stats = summary.data?.expense_stats
 
-  // Messages shown in place of the data while there's nothing to show.
-  const placeholder = !moveId
-    ? 'Create, join, or select a group to see your budget here.'
-    : summary.error
-      ? null
-      : summary.loading
-        ? 'Loading…'
-        : null
+  // Shown in place of the data when there's no group yet.
+  const placeholder = moveId ? null : 'Create, join, or select a group to see your budget here.'
+  const loading = Boolean(moveId) && summary.loading
 
   return (
     <>
@@ -70,7 +65,11 @@ function DashboardContent({ user, move }) {
           <div aria-live="polite">
             {placeholder ? (
               <p className="muted attention-empty">{placeholder}</p>
-            ) : attention.length === 0 ? (
+            ) : loading ? (
+              <div className="attention-empty" aria-label="Loading">
+                <span className="skeleton" style={{ width: '45%' }} />
+              </div>
+            ) : summary.error ? null : attention.length === 0 ? (
               <p className="attention-empty all-good">
                 <Icon name="check" size={18} />
                 {categories.length === 0
@@ -104,7 +103,18 @@ function DashboardContent({ user, move }) {
           </div>
         </section>
 
-        {moveId && !summary.loading && !summary.error && (
+        {loading && (
+          <section className="stats" aria-hidden="true">
+            {[1, 2].map((n) => (
+              <div className="card taped stat" key={n} style={{ '--i': n }}>
+                <span className="skeleton" style={{ width: '35%' }} />
+                <span className="skeleton skeleton-stat" />
+              </div>
+            ))}
+          </section>
+        )}
+
+        {moveId && !loading && !summary.error && (
           <section className="stats" aria-label="Key numbers">
             <LeftToSpend budget={totalBudget} spent={totalSpent} />
             <div className="card taped stat" style={{ '--i': 2 }}>
@@ -125,6 +135,16 @@ function DashboardContent({ user, move }) {
 
           {placeholder ? (
             <p className="muted">{placeholder}</p>
+          ) : loading ? (
+            <div aria-label="Loading">
+              {[60, 40, 75, 30].map((w, n) => (
+                <div className="skeleton-row" key={n}>
+                  <span className="skeleton" style={{ width: '70%' }} />
+                  <span className="skeleton" style={{ width: `${w}%` }} />
+                  <span className="skeleton" />
+                </div>
+              ))}
+            </div>
           ) : summary.error ? null : categories.length === 0 ? (
             <p className="muted">
               No budget or expense data yet. Add a category budget or log an expense to see it here.

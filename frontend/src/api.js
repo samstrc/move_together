@@ -3,16 +3,30 @@
 // VITE_API_URL (e.g. on Render) when it's built.
 const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '')
 
+// The last response for each GET path, so a page you've visited (or that
+// was loaded ahead of time) shows right away while it refreshes (see useApi).
+// Cleared when you log in or out, so one account never sees another's data.
+export const responseCache = new Map()
+
 export function getToken() {
   return localStorage.getItem('token')
 }
 
 export function setToken(token) {
+  responseCache.clear()
   localStorage.setItem('token', token)
 }
 
 export function clearToken() {
+  responseCache.clear()
   localStorage.removeItem('token')
+}
+
+// Loads a GET path into the cache in the background, so opening that page
+// later is instant. Errors are ignored: the page loads it again anyway.
+export function prefetch(path) {
+  if (responseCache.has(path)) return
+  api(path).then((data) => responseCache.set(path, data)).catch(() => {})
 }
 
 // Calls the backend and returns the JSON response.

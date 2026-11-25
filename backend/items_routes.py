@@ -35,12 +35,18 @@ ITEM_SELECT = """
            au.name AS added_by,
            i.notes,
            i.selected_product_id,
+           -- The product picked for it (usually found by Dolly), so the list
+           -- can link to the store.
+           p.title    AS product_title,
+           p.retailer AS product_retailer,
+           p.url      AS product_url,
            i.created_at
     FROM items i
     LEFT JOIN categories c ON c.category_id = i.category_id
     LEFT JOIN rooms r      ON r.room_id     = i.room_id
     LEFT JOIN users ru     ON ru.user_id    = i.responsible_user_id
     LEFT JOIN users au     ON au.user_id    = i.added_by
+    LEFT JOIN products p   ON p.product_id  = i.selected_product_id
 """
 
 

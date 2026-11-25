@@ -4,6 +4,7 @@ import { useOutletContext } from 'react-router-dom'
 import NoGroup from '../components/NoGroup.jsx'
 import MoneyInput from '../components/MoneyInput.jsx'
 import PageHeader from '../components/PageHeader.jsx'
+import { Icon } from '../components/Icons.jsx'
 import { api } from '../api.js'
 import { useApi } from '../hooks/useApi.js'
 import { CURRENCY, formatMoney } from '../utils/format.js'
@@ -23,7 +24,8 @@ function SharedList() {
   if (statusFilter) params.set('status', statusFilter)
   if (categoryFilter) params.set('category_id', categoryFilter)
 
-  const items = useApi(moveId ? `/moves/${moveId}/items?${params}` : null)
+  const query = params.toString()
+  const items = useApi(moveId ? `/moves/${moveId}/items${query ? `?${query}` : ''}` : null)
   const categories = useApi('/categories')
   const details = useApi(moveId ? `/moves/${moveId}` : null) // for the members list
 
@@ -139,6 +141,20 @@ function SharedList() {
                   <td className="item-name-cell">
                     {item.name}
                     {item.quantity > 1 && <span className="muted"> ×{item.quantity}</span>}
+                    {/* The product picked for it (e.g. from Dolly): a link to the store */}
+                    {item.product_url && (
+                      <a
+                        className="item-product-link"
+                        href={item.product_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        title={item.product_title}
+                        aria-label={`${item.product_title} at ${item.product_retailer} (opens in a new tab)`}
+                      >
+                        {item.product_retailer}
+                        <Icon name="external" size={13} />
+                      </a>
+                    )}
                   </td>
                   <td>{item.category ?? '—'}</td>
                   <td>{item.est_cost === null ? '—' : formatMoney(item.est_cost)}</td>

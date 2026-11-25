@@ -3,7 +3,7 @@ import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import Sidebar from '../components/Sidebar.jsx'
 import MobileNav from '../components/MobileNav.jsx'
 import AccountMenu from '../components/AccountMenu.jsx'
-import { api, clearToken, getToken } from '../api.js'
+import { api, clearToken, getToken, prefetch } from '../api.js'
 import { useApi } from '../hooks/useApi.js'
 
 // Remembers which group you were looking at between visits.
@@ -53,6 +53,18 @@ function AppLayout() {
         }
       })
   }, [loggedIn, navigate])
+
+  // Load every tab's data in the background as soon as the group is known,
+  // so switching tabs shows real content right away (most noticeable in the
+  // iOS app, where the API is far away).
+  const prefetchMoveId = moves?.find((m) => m.move_id === selectedMoveId)?.move_id ?? moves?.[0]?.move_id
+  useEffect(() => {
+    if (!prefetchMoveId) return
+    for (const path of ['budget', 'expenses', 'items', 'settlements', '']) {
+      prefetch(`/moves/${prefetchMoveId}${path ? `/${path}` : ''}`)
+    }
+    prefetch('/categories')
+  }, [prefetchMoveId])
 
   // No token at all: go straight to the login page.
   if (!loggedIn) {

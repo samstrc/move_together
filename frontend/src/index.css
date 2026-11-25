@@ -15,6 +15,7 @@
   --paper: #f7f5f1;
   --surface: #ffffff;
   --sunk: #f3f1ec;
+  --sunk-shine: #faf9f6; /* loading shimmer highlight */
   --line: #e6e2da;        /* decorative dividers only */
   --line-strong: #7a746a; /* borders of inputs, buttons, chart outlines (4.63:1) */
   --ink: #22201c;
