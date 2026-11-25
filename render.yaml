@@ -1,0 +1,54 @@
+# Render Blueprint: the database, the API, and the website.
+# Render reads this file to create and update the services
+# (https://render.com/docs/blueprint-spec). Pushing to main redeploys.
+
+databases:
+  - name: move-together-db
+    plan: free
+    region: oregon
+    postgresMajorVersion: "18"
+    databaseName: move_together_db
+    user: move_together_db_user
+
+services:
+  # FastAPI backend. On start, init_db.py sets up the tables and seed data
+  # if the database is empty (it never touches an existing database).
+  - type: web
+    name: move-together-api
+    runtime: python
+    plan: free
+    region: oregon
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: cd backend && python init_db.py && uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.13.5"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: move-together-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      # The OpenAI key for Dolly: set in the Render dashboard, never in git.
+      - key: LLM_API_KEY
+        sync: false
+      # The website's address, so the browser may call the API (CORS).
+      - key: FRONTEND_ORIGINS
+        value: https://move-together.onrender.com
+
+  # React frontend, built once and served as static files.
+  - type: web
+    name: move-together
+    runtime: static
+    buildCommand: cd frontend && npm ci && npm run build
+    staticPublishPath: frontend/dist
+    envVars:
+      # The API's public address, built into the site (see src/api.js).
+      - key: VITE_API_URL
+        value: https://move-together-api.onrender.com
+    routes:
+      # Every page (/dashboard, /items, ...) is handled by the React app.
+      - type: rewrite
+        source: /*
+        destination: /index.html
